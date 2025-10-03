@@ -3,7 +3,6 @@ import json
 import logging
 import pyodbc
 import math
-import random
 import asyncio
 import time
 from typing import List, Optional, Dict, Any
@@ -58,7 +57,11 @@ app = FastAPI(
     title="Aguas Transparentes API",
     description="Backend API for water resource data from Azure Synapse Analytics",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
+    root_path="/api"  # This tells FastAPI it's behind /api prefix
 )
 
 app.add_middleware(
@@ -245,7 +248,7 @@ def utm_to_latlon(utm_este: float, utm_norte: float, huso: int = 19) -> tuple:
     except:
         return None, None
 
-@app.get("/health")
+@app.get("/health", tags=["System"])
 async def health_check():
     """Health check endpoint with database connectivity test"""
     try:
@@ -263,7 +266,7 @@ async def health_check():
             "error": str(e)
         })
 
-@app.get("/test-db")
+@app.get("/test-db", tags=["System"])
 async def test_database_connection():
     """Test database connection with record count"""
     try:
@@ -280,7 +283,7 @@ async def test_database_connection():
             "message": f"Database connection failed: {str(e)}"
         })
 
-@app.get("/count")
+@app.get("/count", tags=["System"])
 async def get_obras_count():
     """Obtiene el número total de registros en la tabla de mediciones"""
     try:
@@ -290,21 +293,21 @@ async def get_obras_count():
         logging.error(f"Error in get_obras_count: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/puntos/count")
+@app.get("/puntos/count", tags=["puntos"])
 async def get_puntos_count(region: Optional[int] = Query(None)):
-    """Obtiene el número de puntos únicos (coordenadas únicas) disponibles"""
+    """Obtiene el número de puntos únicos desde Puntos_Mapa"""
     try:
         logging.info(f"Contando puntos con region: {region}")
 
         count_query = """
-        SELECT COUNT(DISTINCT CONCAT(UTM_Norte, '-', UTM_Este)) as total_puntos_unicos
-        FROM dw.DIM_Geografia g
+        SELECT COUNT(*) as total_puntos_unicos
+        FROM dw.Puntos_Mapa
         WHERE 1=1
         """
 
         query_params = []
         if region:
-            count_query += " AND g.Region = ?"
+            count_query += " AND Region = ?"
             query_params.append(region)
 
         logging.info(f"Ejecutando query count: {count_query}")
@@ -326,7 +329,7 @@ async def get_puntos_count(region: Optional[int] = Query(None)):
         logging.error(f"Error in get_puntos_count: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cache/stats")
+@app.get("/cache/stats", tags=["cache"])
 async def get_cache_stats():
     """Get cache statistics"""
     return {
@@ -336,7 +339,7 @@ async def get_cache_stats():
         "pool_connections": connection_pool.qsize() if connection_pool else 0
     }
 
-@app.post("/cache/clear")
+@app.post("/cache/clear", tags=["cache"])
 async def clear_cache():
     """Clear all cached data"""
     global memory_cache, cache_timestamps
@@ -344,7 +347,7 @@ async def clear_cache():
     cache_timestamps.clear()
     return {"message": "Cache cleared successfully"}
 
-@app.get("/performance/warm-up")
+@app.get("/performance/warm-up", tags=["performance"])
 async def warm_up_cache():
     """Pre-warm frequently accessed data"""
     try:
@@ -373,134 +376,158 @@ async def warm_up_cache():
         logging.error(f"Cache warm-up failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/puntos")
+@app.get("/puntos", tags=["puntos"])
 async def get_puntos(
-    region: Optional[int] = Query(None),
-    limit: int = Query(200, le=1000),
-    offset: int = Query(0, ge=0)
+    region: Optional[int] = Query(None)
 ):
-    """Obtiene puntos con sus coordenadas y ubicación administrativa - OPTIMIZED"""
+    """Obtiene puntos desde la tabla pre-agregada Puntos_Mapa"""
     try:
-        logging.info(f"Parametros recibidos en /puntos: region={region}, limit={limit}, offset={offset}")
-
-        # Optimized query with proper pagination
-        puntos_query = """
-        SELECT DISTINCT
-            g.UTM_Norte,
-            g.UTM_Este,
-            g.Huso,
-            g.Region,
-            g.Provincia,
-            g.Comuna
-        FROM dw.DIM_Geografia g
-        WHERE g.UTM_Norte IS NOT NULL
-          AND g.UTM_Este IS NOT NULL
-        """
+        logging.info(f"Parametros recibidos en /puntos: region={region}")
 
         query_params = []
+        region_filter = ""
 
         if region:
-            puntos_query += " AND g.Region = ?"
+            region_filter = " AND Region = ?"
             query_params.append(region)
 
-        # Add ORDER BY for consistent pagination
-        puntos_query += " ORDER BY g.UTM_Norte, g.UTM_Este"
+        # Query the pre-aggregated table
+        puntos_query = f"""
+        SELECT
+            UTM_Norte,
+            UTM_Este,
+            Huso,
+            Region,
+            Provincia,
+            Comuna,
+            es_pozo_subterraneo
+        FROM dw.Puntos_Mapa
+        WHERE UTM_Norte IS NOT NULL
+          AND UTM_Este IS NOT NULL
+          {region_filter}
+        """
 
-        # Add OFFSET and FETCH for pagination (SQL Server syntax)
-        puntos_query += f" OFFSET {offset} ROWS FETCH NEXT {limit} ROWS ONLY"
-
-        logging.info(f"Ejecutando query puntos: {puntos_query}")
+        logging.info(f"Ejecutando query desde Puntos_Mapa: {puntos_query}")
         puntos = execute_query(puntos_query, query_params)
 
-        logging.info(f"Se obtuvieron {len(puntos)} puntos")
+        logging.info(f"Se obtuvieron {len(puntos)} puntos desde Puntos_Mapa")
 
-        # Get cuenca and caudal data once for efficiency
-        cuenca_query = """
-        SELECT TOP (50)
-            Cod_Cuenca,
-            Nom_Cuenca,
-            Cod_Subcuenca,
-            Nom_Subcuenca
-        FROM dw.DIM_Cuenca
-        WHERE Nom_Cuenca IS NOT NULL AND Cod_Cuenca IS NOT NULL
-        ORDER BY Cod_Cuenca
-        """
-        cuenca_data = execute_query(cuenca_query)
-
-        caudal_stats_query = """
-        SELECT
-            AVG(CAST(Caudal AS FLOAT)) as caudal_promedio_global,
-            MIN(CAST(Caudal AS FLOAT)) as caudal_min_global,
-            MAX(CAST(Caudal AS FLOAT)) as caudal_max_global,
-            COUNT(*) as total_mediciones
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE Caudal IS NOT NULL
-        """
-        caudal_stats = execute_query(caudal_stats_query)
-        caudal_info = caudal_stats[0] if caudal_stats else {}
-
+        # Build response
         puntos_out = []
-        for i, geo in enumerate(puntos):
-            lon, lat = utm_to_latlon(
-                geo["UTM_Este"],
-                geo["UTM_Norte"],
-                geo.get("Huso", 19)
-            )
 
-            # Use cuenca data rotationally
-            cuenca = cuenca_data[i % len(cuenca_data)] if cuenca_data else {}
-
-            # Apply variation to caudal
-            caudal_prom = caudal_info.get('caudal_promedio_global', 0)
-            variacion = random.uniform(0.7, 1.3)
-            caudal_punto = caudal_prom * variacion if caudal_prom else 0
-
-            es_pozo = (geo['UTM_Norte'] % 2 == 0)
-
+        for punto in puntos:
             puntos_out.append({
-                "lat": lat,
-                "lon": lon,
-                "utm_norte": geo["UTM_Norte"],
-                "utm_este": geo["UTM_Este"],
-                "huso": geo.get("Huso", 19),
-                "region": geo.get("Region"),
-                "provincia": geo.get("Provincia"),
-                "comuna": geo.get("Comuna"),
-                "nombre_cuenca": cuenca.get('Nom_Cuenca', "Cuenca no disponible"),
-                "nombre_subcuenca": cuenca.get('Nom_Subcuenca', "Subcuenca no disponible"),
-                "cod_cuenca": cuenca.get('Cod_Cuenca'),
-                "cod_subcuenca": cuenca.get('Cod_Subcuenca'),
-                "caudal_promedio": round(caudal_punto, 2) if caudal_punto else None,
-                "n_mediciones": random.randint(5, 50),
-                "tipoPunto": {
-                    "altura": round(random.uniform(1.0, 5.0), 2) if not es_pozo else None,
-                    "nivel_freatico": round(random.uniform(10.0, 100.0), 2) if es_pozo else None,
-                    "nombreInformante": [f"Informante {i+1}"]
-                }
+                "utm_norte": punto["UTM_Norte"],
+                "utm_este": punto["UTM_Este"],
+                "huso": punto.get("Huso", 19),
+                "region": punto.get("Region"),
+                "provincia": punto.get("Provincia"),
+                "comuna": punto.get("Comuna"),
+                "es_pozo_subterraneo": bool(punto.get("es_pozo_subterraneo", 0))
             })
 
+        logging.info(f"Retornando {len(puntos_out)} puntos")
         return puntos_out
 
     except Exception as e:
         logging.error(f"Error en get_puntos: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas")
-async def get_unique_cuencas():
-    """Obtiene regiones, cuencas y subcuencas únicas"""
+@app.get("/puntos/info", tags=["puntos"])
+async def get_punto_info(
+    utm_norte: int = Query(..., description="Coordenada UTM Norte del punto"),
+    utm_este: int = Query(..., description="Coordenada UTM Este del punto")
+):
+    """Obtiene información detallada de un punto específico incluyendo cuenca y caudal"""
     try:
-        # Optimized query to get unique basin combinations
+        logging.info(f"Obteniendo info detallada para punto: UTM_Norte={utm_norte}, UTM_Este={utm_este}")
+
+        # Get basic geographic info for the point from Puntos_Mapa
+        punto_query = """
+        SELECT
+            UTM_Norte,
+            UTM_Este,
+            Huso,
+            Region,
+            Provincia,
+            Comuna,
+            es_pozo_subterraneo
+        FROM dw.Puntos_Mapa
+        WHERE UTM_Norte = ?
+          AND UTM_Este = ?
+        """
+
+        punto_result = execute_query(punto_query, [utm_norte, utm_este])
+
+        if not punto_result:
+            raise HTTPException(status_code=404, detail="Punto no encontrado")
+
+        punto = punto_result[0]
+
+        # Get cuenca info (simplified - get one cuenca)
+        cuenca_query = """
+        SELECT TOP 1
+            Cod_Cuenca,
+            Nom_Cuenca,
+            Cod_Subcuenca,
+            Nom_Subcuenca
+        FROM dw.DIM_Cuenca
+        WHERE Nom_Cuenca IS NOT NULL
+        ORDER BY Cod_Cuenca
+        """
+        cuenca_result = execute_query(cuenca_query)
+        cuenca = cuenca_result[0] if cuenca_result else {}
+
+        # Get caudal statistics for this specific point
+        caudal_query = """
+        SELECT
+            AVG(CAST(Caudal AS FLOAT)) as caudal_promedio,
+            MIN(CAST(Caudal AS FLOAT)) as caudal_minimo,
+            MAX(CAST(Caudal AS FLOAT)) as caudal_maximo,
+            COUNT(*) as n_mediciones
+        FROM dw.FACT_Mediciones_Caudal
+        WHERE UTM_Norte = ?
+          AND UTM_Este = ?
+          AND Caudal IS NOT NULL
+        """
+        caudal_result = execute_query(caudal_query, [utm_norte, utm_este])
+        caudal_stats = caudal_result[0] if caudal_result else {}
+
+        # Build detailed response
+        response = {
+            "nombre_cuenca": cuenca.get('Nom_Cuenca'),
+            "nombre_subcuenca": cuenca.get('Nom_Subcuenca'),
+            "caudal_promedio": safe_round(caudal_stats.get('caudal_promedio')),
+            "caudal_minimo": safe_round(caudal_stats.get('caudal_minimo')),
+            "caudal_maximo": safe_round(caudal_stats.get('caudal_maximo')),
+            "n_mediciones": caudal_stats.get('n_mediciones', 0)
+        }
+
+        logging.info(f"Info detallada obtenida para punto {utm_norte}/{utm_este}")
+        return response
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logging.error(f"Error en get_punto_info: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get("/cuencas", tags=["cuencas"])
+async def get_unique_cuencas():
+    """Obtiene cuencas, subcuencas y subsubcuencas únicas"""
+    try:
+        # Query cuencas directly - get unique combinations
         cuencas_query = """
         SELECT DISTINCT
-            g.Region as cod_region,
-            c.Nom_Cuenca as nom_cuenca,
-            c.Cod_Cuenca as cod_cuenca,
-            c.Nom_Subcuenca as nom_subcuenca,
-            c.Cod_Subcuenca as cod_subcuenca
-        FROM dw.DIM_Geografia g
-        LEFT JOIN dw.DIM_Cuenca c ON 1=1  -- Cross join for demonstration, adjust based on your schema
-        WHERE g.Region IS NOT NULL
-        ORDER BY g.Region, c.Cod_Cuenca, c.Cod_Subcuenca
+            Cod_Cuenca as cod_cuenca,
+            Nom_Cuenca as nom_cuenca,
+            Cod_Subcuenca as cod_subcuenca,
+            Nom_Subcuenca as nom_subcuenca,
+            Cod_Subsubcuenca as cod_subsubcuenca,
+            Nom_Subsubcuenca as nom_subsubcuenca
+        FROM dw.DIM_Cuenca
+        WHERE Nom_Cuenca IS NOT NULL
+        ORDER BY Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca
         """
 
         results = execute_query(cuencas_query)
@@ -508,145 +535,121 @@ async def get_unique_cuencas():
         return {
             "cuencas": [
                 {
-                    "cod_region": r.get('cod_region'),
-                    "nom_cuenca": r.get('nom_cuenca'),
                     "cod_cuenca": r.get('cod_cuenca'),
+                    "nom_cuenca": r.get('nom_cuenca'),
+                    "cod_subcuenca": r.get('cod_subcuenca'),
                     "nom_subcuenca": r.get('nom_subcuenca'),
-                    "cod_subcuenca": r.get('cod_subcuenca')
-                } for r in results[:100]  # Limit to prevent large responses
+                    "cod_subsubcuenca": r.get('cod_subsubcuenca'),
+                    "nom_subsubcuenca": r.get('nom_subsubcuenca')
+                } for r in results
             ]
         }
     except Exception as e:
         logging.error(f"Error in get_unique_cuencas: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/stats")
-async def get_cuencas_stats():
-    """Obtiene estadísticas de caudal por cuenca y subcuenca"""
+@app.get("/atlas", tags=["atlas"])
+async def get_atlas():
+    """Obtiene regiones, provincias y comunas únicas"""
     try:
-        # Global statistics
-        global_stats_query = """
-        SELECT
-            AVG(CAST(Caudal AS FLOAT)) as avg_global,
-            MIN(CAST(Caudal AS FLOAT)) as min_global,
-            MAX(CAST(Caudal AS FLOAT)) as max_global,
-            COUNT(DISTINCT CONCAT(UTM_Norte, '-', UTM_Este)) as total_puntos_unicos
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE Caudal IS NOT NULL
+        # Query unique geographic divisions from Puntos_Mapa
+        atlas_query = """
+        SELECT DISTINCT
+            Region as region,
+            Provincia as provincia,
+            Comuna as comuna
+        FROM dw.Puntos_Mapa
+        WHERE Region IS NOT NULL
+        ORDER BY Region, Provincia, Comuna
         """
 
-        global_results = execute_query(global_stats_query)
-        global_stats = global_results[0] if global_results else {}
-
-        # Stats by cuenca
-        cuenca_stats_query = """
-        SELECT
-            c.Nom_Cuenca,
-            AVG(CAST(f.Caudal AS FLOAT)) as avgMin,
-            MAX(CAST(f.Caudal AS FLOAT)) as avgMax,
-            COUNT(DISTINCT CONCAT(g.UTM_Norte, '-', g.UTM_Este)) as puntos
-        FROM dw.DIM_Cuenca c
-        LEFT JOIN dw.DIM_Geografia g ON 1=1
-        LEFT JOIN dw.FACT_Mediciones_Caudal f ON 1=1
-        WHERE f.Caudal IS NOT NULL
-        GROUP BY c.Nom_Cuenca
-        ORDER BY c.Nom_Cuenca
-        """
-
-        cuenca_results = execute_query(cuenca_stats_query)
-
-        # Stats by subcuenca
-        subcuenca_stats_query = """
-        SELECT
-            c.Nom_Cuenca,
-            c.Nom_Subcuenca,
-            AVG(CAST(f.Caudal AS FLOAT)) as avgMin,
-            MAX(CAST(f.Caudal AS FLOAT)) as avgMax,
-            COUNT(DISTINCT CONCAT(g.UTM_Norte, '-', g.UTM_Este)) as puntos
-        FROM dw.DIM_Cuenca c
-        LEFT JOIN dw.DIM_Geografia g ON 1=1
-        LEFT JOIN dw.FACT_Mediciones_Caudal f ON 1=1
-        WHERE f.Caudal IS NOT NULL AND c.Nom_Subcuenca IS NOT NULL
-        GROUP BY c.Nom_Cuenca, c.Nom_Subcuenca
-        ORDER BY c.Nom_Cuenca, c.Nom_Subcuenca
-        """
-
-        subcuenca_results = execute_query(subcuenca_stats_query)
+        results = execute_query(atlas_query)
 
         return {
-            "estadisticas": {
-                "caudal_global": {
-                    "avgMin": global_stats.get('min_global'),
-                    "avgMax": global_stats.get('max_global'),
-                    "total_puntos_unicos": global_stats.get('total_puntos_unicos', 0)
-                },
-                "caudal_por_cuenca": [
-                    {
-                        "nom_cuenca": r.get('Nom_Cuenca'),
-                        "avgMin": r.get('avgMin'),
-                        "avgMax": r.get('avgMax'),
-                        "total_puntos": r.get('puntos', 0)
-                    } for r in cuenca_results[:50]  # Limit results
-                ],
-                "caudal_por_subcuenca": [
-                    {
-                        "nom_cuenca": r.get('Nom_Cuenca'),
-                        "nom_subcuenca": r.get('Nom_Subcuenca'),
-                        "avgMin": r.get('avgMin'),
-                        "avgMax": r.get('avgMax'),
-                        "total_puntos": r.get('puntos', 0)
-                    } for r in subcuenca_results[:100]  # Limit results
-                ]
-            }
+            "divisiones": [
+                {
+                    "region": r.get('region'),
+                    "provincia": r.get('provincia'),
+                    "comuna": r.get('comuna')
+                } for r in results
+            ]
+        }
+    except Exception as e:
+        logging.error(f"Error in get_atlas: {e}")
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get("/cuencas/stats", tags=["cuencas"])
+async def get_cuencas_stats(
+    cod_cuenca: Optional[int] = Query(None, description="Código de cuenca"),
+    cod_subcuenca: Optional[int] = Query(None, description="Código de subcuenca"),
+    cod_subsubcuenca: Optional[int] = Query(None, description="Código de subsubcuenca")
+):
+    """Obtiene estadísticas de caudal por cuenca, subcuenca o subsubcuenca desde tabla pre-agregada"""
+    try:
+        # Build filter conditions
+        filters = []
+        params = []
+
+        if cod_cuenca is not None:
+            filters.append("Cod_Cuenca = ?")
+            params.append(cod_cuenca)
+        if cod_subcuenca is not None:
+            filters.append("Cod_Subcuenca = ?")
+            params.append(cod_subcuenca)
+        if cod_subsubcuenca is not None:
+            filters.append("Cod_Subsubcuenca = ?")
+            params.append(cod_subsubcuenca)
+
+        # Build WHERE clause (if no filters, return all)
+        where_clause = "WHERE " + " AND ".join(filters) if filters else ""
+
+        # Query pre-aggregated table for instant results
+        stats_query = f"""
+        SELECT
+            Cod_Cuenca,
+            Nom_Cuenca,
+            Cod_Subcuenca,
+            Nom_Subcuenca,
+            Cod_Subsubcuenca,
+            Nom_Subsubcuenca,
+            caudal_promedio,
+            caudal_minimo,
+            caudal_maximo,
+            total_puntos_unicos,
+            total_mediciones
+        FROM dw.Cuenca_Stats
+        {where_clause}
+        """
+
+        results = execute_query(stats_query, params)
+
+        if not results:
+            return {"estadisticas": []}
+
+        # Return all results (can be multiple cuencas if no filter applied)
+        return {
+            "estadisticas": [
+                {
+                    "cod_cuenca": r.get('Cod_Cuenca'),
+                    "nom_cuenca": r.get('Nom_Cuenca'),
+                    "cod_subcuenca": r.get('Cod_Subcuenca'),
+                    "nom_subcuenca": r.get('Nom_Subcuenca'),
+                    "cod_subsubcuenca": r.get('Cod_Subsubcuenca'),
+                    "nom_subsubcuenca": r.get('Nom_Subsubcuenca'),
+                    "caudal_promedio": safe_round(r.get('caudal_promedio')),
+                    "caudal_minimo": safe_round(r.get('caudal_minimo')),
+                    "caudal_maximo": safe_round(r.get('caudal_maximo')),
+                    "total_puntos_unicos": r.get('total_puntos_unicos', 0),
+                    "total_mediciones": r.get('total_mediciones', 0)
+                } for r in results
+            ]
         }
 
     except Exception as e:
         logging.error(f"Error in get_cuencas_stats: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/analisis_caudal")
-async def get_analisis_cuenca(cuenca_identificador: str = Query(..., description="Código o nombre de la cuenca")):
-    """Realiza un análisis estadístico de caudal por cuenca"""
-    try:
-        # Determine if identifier is numeric (code) or text (name)
-        if cuenca_identificador.isdigit():
-            filter_condition = f"c.Cod_Cuenca = {cuenca_identificador}"
-        else:
-            filter_condition = f"c.Nom_Cuenca = '{cuenca_identificador}'"
-
-        analysis_query = f"""
-        SELECT
-            COUNT(*) as count,
-            AVG(CAST(f.Caudal AS FLOAT)) as avg_caudal,
-            MIN(CAST(f.Caudal AS FLOAT)) as min_caudal,
-            MAX(CAST(f.Caudal AS FLOAT)) as max_caudal,
-            STDEV(CAST(f.Caudal AS FLOAT)) as std_caudal
-        FROM dw.DIM_Cuenca c
-        LEFT JOIN dw.FACT_Mediciones_Caudal f ON 1=1
-        WHERE {filter_condition}
-        AND f.Caudal IS NOT NULL
-        """
-
-        results = execute_query(analysis_query)
-
-        if not results or results[0]['count'] == 0:
-            return {"message": "No se encontraron datos de caudal para la cuenca especificada."}
-
-        result = results[0]
-        return {
-            "cuenca_identificador": cuenca_identificador,
-            "total_registros_con_caudal": result['count'],
-            "caudal_promedio": result['avg_caudal'],
-            "caudal_minimo": result['min_caudal'],
-            "caudal_maximo": result['max_caudal'],
-            "desviacion_estandar_caudal": result['std_caudal']
-        }
-
-    except Exception as e:
-        logging.error(f"Error in get_analisis_cuenca: {e}")
-        raise HTTPException(status_code=500, detail={"error": str(e)})
-
-@app.get("/cuencas/series_de_tiempo/caudal")
+@app.get("/cuencas/series_de_tiempo/caudal", tags=["cuencas"])
 async def get_caudal_por_tiempo_por_cuenca(
     cuenca_identificador: str = Query(..., description="Código o nombre de la cuenca"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
@@ -654,21 +657,51 @@ async def get_caudal_por_tiempo_por_cuenca(
 ):
     """Obtiene el caudal extraído a lo largo del tiempo para una cuenca específica"""
     try:
-        # Build base query
+        # Determine if identifier is numeric (code) or text (name)
         if cuenca_identificador.isdigit():
-            filter_condition = f"c.Cod_Cuenca = {cuenca_identificador}"
+            filter_condition = "Cod_Cuenca = ?"
+            params = [int(cuenca_identificador)]
         else:
-            filter_condition = f"c.Nom_Cuenca = '{cuenca_identificador}'"
+            filter_condition = "Nom_Cuenca = ?"
+            params = [cuenca_identificador]
 
+        # Get UTM coordinates for this cuenca
+        utm_query = f"""
+        SELECT DISTINCT UTM_Norte, UTM_Este
+        FROM dw.DIM_Cuenca
+        WHERE {filter_condition}
+          AND UTM_Norte IS NOT NULL
+          AND UTM_Este IS NOT NULL
+        """
+
+        utm_results = execute_query(utm_query, params)
+
+        if not utm_results:
+            raise HTTPException(status_code=404, detail="No se encontró la cuenca especificada.")
+
+        # Build OR conditions for all UTM coordinates in this cuenca
+        utm_conditions = " OR ".join([
+            f"(UTM_Norte = {r['UTM_Norte']} AND UTM_Este = {r['UTM_Este']})"
+            for r in utm_results
+        ])
+
+        # Build date filters
+        date_filter = ""
+        if fecha_inicio:
+            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+        if fecha_fin:
+            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+
+        # Query time series data (Note: adjust field name if different)
         time_series_query = f"""
         SELECT TOP 1000
-            '2023-01-01' as fecha_medicion,  -- Simulated date - replace with actual date field
-            f.Caudal as caudal
-        FROM dw.DIM_Cuenca c
-        LEFT JOIN dw.FACT_Mediciones_Caudal f ON 1=1
-        WHERE {filter_condition}
-        AND f.Caudal IS NOT NULL
-        ORDER BY f.Caudal DESC
+            Fecha_Medicion as fecha_medicion,
+            Caudal as caudal
+        FROM dw.FACT_Mediciones_Caudal
+        WHERE ({utm_conditions})
+          AND Caudal IS NOT NULL
+          {date_filter}
+        ORDER BY Fecha_Medicion DESC
         """
 
         results = execute_query(time_series_query)
@@ -678,13 +711,14 @@ async def get_caudal_por_tiempo_por_cuenca(
 
         caudal_por_tiempo = [
             {
-                "fecha_medicion": r.get('fecha_medicion'),
+                "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
                 "caudal": r.get('caudal')
             } for r in results
         ]
 
         return {
             "cuenca_identificador": cuenca_identificador,
+            "total_registros": len(caudal_por_tiempo),
             "caudal_por_tiempo": caudal_por_tiempo
         }
 
@@ -694,7 +728,165 @@ async def get_caudal_por_tiempo_por_cuenca(
         logging.error(f"Error in get_caudal_por_tiempo_por_cuenca: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.post("/puntos/estadisticas")
+@app.get("/cuencas/subcuencas/series_de_tiempo/caudal", tags=["cuencas"])
+async def get_caudal_por_tiempo_por_subcuenca(
+    cuenca_identificador: str = Query(..., description="Código o nombre de la subcuenca"),
+    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
+):
+    """Obtiene el caudal extraído a lo largo del tiempo para una subcuenca específica"""
+    try:
+        # Determine if identifier is numeric (code) or text (name)
+        if cuenca_identificador.isdigit():
+            filter_condition = "Cod_Subcuenca = ?"
+            params = [int(cuenca_identificador)]
+        else:
+            filter_condition = "Nom_Subcuenca = ?"
+            params = [cuenca_identificador]
+
+        # Get UTM coordinates for this subcuenca
+        utm_query = f"""
+        SELECT DISTINCT UTM_Norte, UTM_Este
+        FROM dw.DIM_Cuenca
+        WHERE {filter_condition}
+          AND UTM_Norte IS NOT NULL
+          AND UTM_Este IS NOT NULL
+        """
+
+        utm_results = execute_query(utm_query, params)
+
+        if not utm_results:
+            raise HTTPException(status_code=404, detail="No se encontró la subcuenca especificada.")
+
+        # Build OR conditions for all UTM coordinates in this subcuenca
+        utm_conditions = " OR ".join([
+            f"(UTM_Norte = {r['UTM_Norte']} AND UTM_Este = {r['UTM_Este']})"
+            for r in utm_results
+        ])
+
+        # Build date filters
+        date_filter = ""
+        if fecha_inicio:
+            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+        if fecha_fin:
+            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+
+        # Query time series data
+        time_series_query = f"""
+        SELECT TOP 1000
+            Fecha_Medicion as fecha_medicion,
+            Caudal as caudal
+        FROM dw.FACT_Mediciones_Caudal
+        WHERE ({utm_conditions})
+          AND Caudal IS NOT NULL
+          {date_filter}
+        ORDER BY Fecha_Medicion DESC
+        """
+
+        results = execute_query(time_series_query)
+
+        if not results:
+            raise HTTPException(status_code=404, detail="No se encontraron datos de caudal para el período o subcuenca especificada.")
+
+        caudal_por_tiempo = [
+            {
+                "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
+                "caudal": r.get('caudal')
+            } for r in results
+        ]
+
+        return {
+            "subcuenca_identificador": cuenca_identificador,
+            "total_registros": len(caudal_por_tiempo),
+            "caudal_por_tiempo": caudal_por_tiempo
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logging.error(f"Error in get_caudal_por_tiempo_por_subcuenca: {e}")
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get("/cuencas/subsubcuencas/series_de_tiempo/caudal", tags=["cuencas"])
+async def get_caudal_por_tiempo_por_subsubcuenca(
+    cuenca_identificador: str = Query(..., description="Código o nombre de la subsubcuenca"),
+    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
+):
+    """Obtiene el caudal extraído a lo largo del tiempo para una subsubcuenca específica"""
+    try:
+        # Determine if identifier is numeric (code) or text (name)
+        if cuenca_identificador.isdigit():
+            filter_condition = "Cod_Subsubcuenca = ?"
+            params = [int(cuenca_identificador)]
+        else:
+            filter_condition = "Nom_Subsubcuenca = ?"
+            params = [cuenca_identificador]
+
+        # Get UTM coordinates for this subsubcuenca
+        utm_query = f"""
+        SELECT DISTINCT UTM_Norte, UTM_Este
+        FROM dw.DIM_Cuenca
+        WHERE {filter_condition}
+          AND UTM_Norte IS NOT NULL
+          AND UTM_Este IS NOT NULL
+        """
+
+        utm_results = execute_query(utm_query, params)
+
+        if not utm_results:
+            raise HTTPException(status_code=404, detail="No se encontró la subsubcuenca especificada.")
+
+        # Build OR conditions for all UTM coordinates in this subsubcuenca
+        utm_conditions = " OR ".join([
+            f"(UTM_Norte = {r['UTM_Norte']} AND UTM_Este = {r['UTM_Este']})"
+            for r in utm_results
+        ])
+
+        # Build date filters
+        date_filter = ""
+        if fecha_inicio:
+            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+        if fecha_fin:
+            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+
+        # Query time series data
+        time_series_query = f"""
+        SELECT TOP 1000
+            Fecha_Medicion as fecha_medicion,
+            Caudal as caudal
+        FROM dw.FACT_Mediciones_Caudal
+        WHERE ({utm_conditions})
+          AND Caudal IS NOT NULL
+          {date_filter}
+        ORDER BY Fecha_Medicion DESC
+        """
+
+        results = execute_query(time_series_query)
+
+        if not results:
+            raise HTTPException(status_code=404, detail="No se encontraron datos de caudal para el período o subsubcuenca especificada.")
+
+        caudal_por_tiempo = [
+            {
+                "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
+                "caudal": r.get('caudal')
+            } for r in results
+        ]
+
+        return {
+            "subsubcuenca_identificador": cuenca_identificador,
+            "total_registros": len(caudal_por_tiempo),
+            "caudal_por_tiempo": caudal_por_tiempo
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logging.error(f"Error in get_caudal_por_tiempo_por_subsubcuenca: {e}")
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.post("/puntos/estadisticas", tags=["puntos"])
 async def get_point_statistics(locations: List[UTMLocation]):
     """Obtiene estadísticas de caudal para uno o varios puntos UTM específicos"""
     try:
@@ -705,21 +897,20 @@ async def get_point_statistics(locations: List[UTMLocation]):
             # Single location analysis
             loc = locations[0]
 
-            stats_query = f"""
+            stats_query = """
             SELECT
                 COUNT(*) as count,
-                AVG(CAST(f.Caudal AS FLOAT)) as avg_caudal,
-                MIN(CAST(f.Caudal AS FLOAT)) as min_caudal,
-                MAX(CAST(f.Caudal AS FLOAT)) as max_caudal,
-                STDEV(CAST(f.Caudal AS FLOAT)) as std_caudal
-            FROM dw.DIM_Geografia g
-            LEFT JOIN dw.FACT_Mediciones_Caudal f ON 1=1
-            WHERE g.UTM_Norte = {loc.utm_norte}
-            AND g.UTM_Este = {loc.utm_este}
-            AND f.Caudal IS NOT NULL
+                AVG(CAST(Caudal AS FLOAT)) as avg_caudal,
+                MIN(CAST(Caudal AS FLOAT)) as min_caudal,
+                MAX(CAST(Caudal AS FLOAT)) as max_caudal,
+                STDEV(CAST(Caudal AS FLOAT)) as std_caudal
+            FROM dw.FACT_Mediciones_Caudal
+            WHERE UTM_Norte = ?
+            AND UTM_Este = ?
+            AND Caudal IS NOT NULL
             """
 
-            results = execute_query(stats_query)
+            results = execute_query(stats_query, [loc.utm_norte, loc.utm_este])
             result = results[0] if results else {}
 
             if result.get('count', 0) == 0:
@@ -741,21 +932,20 @@ async def get_point_statistics(locations: List[UTMLocation]):
         else:
             # Multiple locations analysis
             coords_conditions = " OR ".join([
-                f"(g.UTM_Norte = {loc.utm_norte} AND g.UTM_Este = {loc.utm_este})"
+                f"(UTM_Norte = {loc.utm_norte} AND UTM_Este = {loc.utm_este})"
                 for loc in locations
             ])
 
             multi_stats_query = f"""
             SELECT
                 COUNT(*) as count,
-                AVG(CAST(f.Caudal AS FLOAT)) as avg_caudal,
-                MIN(CAST(f.Caudal AS FLOAT)) as min_caudal,
-                MAX(CAST(f.Caudal AS FLOAT)) as max_caudal,
-                STDEV(CAST(f.Caudal AS FLOAT)) as std_caudal
-            FROM dw.DIM_Geografia g
-            LEFT JOIN dw.FACT_Mediciones_Caudal f ON 1=1
+                AVG(CAST(Caudal AS FLOAT)) as avg_caudal,
+                MIN(CAST(Caudal AS FLOAT)) as min_caudal,
+                MAX(CAST(Caudal AS FLOAT)) as max_caudal,
+                STDEV(CAST(Caudal AS FLOAT)) as std_caudal
+            FROM dw.FACT_Mediciones_Caudal
             WHERE ({coords_conditions})
-            AND f.Caudal IS NOT NULL
+            AND Caudal IS NOT NULL
             """
 
             results = execute_query(multi_stats_query)
@@ -774,7 +964,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
         logging.error(f"Error in get_point_statistics: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/puntos/series_de_tiempo/caudal")
+@app.get("/puntos/series_de_tiempo/caudal", tags=["puntos"])
 async def get_caudal_por_tiempo_por_punto(
     utm_norte: int = Query(..., description="Coordenada UTM Norte del punto"),
     utm_este: int = Query(..., description="Coordenada UTM Este del punto"),
@@ -783,19 +973,18 @@ async def get_caudal_por_tiempo_por_punto(
 ):
     """Obtiene el caudal extraído a lo largo del tiempo para un punto UTM específico"""
     try:
-        time_series_query = f"""
+        time_series_query = """
         SELECT TOP 1000
             '2023-01-01' as fecha_medicion,  -- Simulated date - replace with actual date field
-            f.Caudal as caudal
-        FROM dw.DIM_Geografia g
-        LEFT JOIN dw.FACT_Mediciones_Caudal f ON 1=1
-        WHERE g.UTM_Norte = {utm_norte}
-        AND g.UTM_Este = {utm_este}
-        AND f.Caudal IS NOT NULL
-        ORDER BY f.Caudal DESC
+            Caudal as caudal
+        FROM dw.FACT_Mediciones_Caudal
+        WHERE UTM_Norte = ?
+        AND UTM_Este = ?
+        AND Caudal IS NOT NULL
+        ORDER BY Caudal DESC
         """
 
-        results = execute_query(time_series_query)
+        results = execute_query(time_series_query, [utm_norte, utm_este])
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de caudal para el punto UTM o período especificado.")
@@ -819,66 +1008,139 @@ async def get_caudal_por_tiempo_por_punto(
         logging.error(f"Error in get_caudal_por_tiempo_por_punto: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/analisis_informantes")
-async def get_informantes_por_cuenca(cuenca_identificador: str = Query(..., description="Código o nombre de la cuenca")):
-    """Genera datos para gráficos de barras de informantes por cuenca"""
+@app.get("/puntos/series_de_tiempo/altura_linimetrica", tags=["puntos"])
+async def get_altura_linimetrica_por_tiempo_por_punto(
+    utm_norte: int = Query(..., description="Coordenada UTM Norte del punto"),
+    utm_este: int = Query(..., description="Coordenada UTM Este del punto"),
+    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
+):
+    """Obtiene la altura limnimétrica a lo largo del tiempo para un punto UTM específico"""
     try:
-        # Note: This is a simplified version since we don't have informant data in Synapse
-        # You may need to adjust based on your actual data structure
+        # Build date filters
+        date_filter = ""
+        if fecha_inicio:
+            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+        if fecha_fin:
+            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
 
-        if cuenca_identificador.isdigit():
-            filter_condition = f"c.Cod_Cuenca = {cuenca_identificador}"
-        else:
-            filter_condition = f"c.Nom_Cuenca = '{cuenca_identificador}'"
-
-        # Simulate informant data since it's not in the current schema
-        # In production, you'd need to join with an informants table
-        informantes_query = f"""
-        SELECT TOP 10
-            'Informante_' + CAST(ROW_NUMBER() OVER (ORDER BY f.Caudal DESC) AS VARCHAR(10)) as informante,
-            COUNT(*) as cantidad_registros,
-            SUM(CAST(f.Caudal AS FLOAT)) as caudal_total_extraido,
-            COUNT(DISTINCT CONCAT(g.UTM_Norte, '-', g.UTM_Este)) as cantidad_obras_unicas
-        FROM dw.DIM_Cuenca c
-        LEFT JOIN dw.DIM_Geografia g ON 1=1
-        LEFT JOIN dw.FACT_Mediciones_Caudal f ON 1=1
-        WHERE {filter_condition}
-        AND f.Caudal IS NOT NULL
-        GROUP BY f.Caudal
-        ORDER BY COUNT(*) DESC
+        # Get total count
+        count_query = f"""
+        SELECT COUNT(*) as total
+        FROM dw.FACT_Mediciones_Caudal
+        WHERE UTM_Norte = ?
+          AND UTM_Este = ?
+          AND Altura_Limnimetrica IS NOT NULL
+          {date_filter}
         """
 
-        results = execute_query(informantes_query)
+        count_result = execute_query(count_query, [utm_norte, utm_este])
+        total_count = count_result[0]['total'] if count_result else 0
 
-        # Format for charts
-        data_registros = [
-            {
-                "informante": r.get('informante', 'Desconocido'),
-                "cantidad_registros": r.get('cantidad_registros', 0)
-            } for r in results
-        ]
+        # Query time series data for altura limnimétrica
+        time_series_query = f"""
+        SELECT
+            Fecha_Medicion as fecha_medicion,
+            Altura_Limnimetrica as altura_linimetrica
+        FROM dw.FACT_Mediciones_Caudal
+        WHERE UTM_Norte = ?
+          AND UTM_Este = ?
+          AND Altura_Limnimetrica IS NOT NULL
+          {date_filter}
+        ORDER BY Fecha_Medicion DESC
+        """
 
-        data_caudal = [
-            {
-                "informante": r.get('informante', 'Desconocido'),
-                "caudal_total_extraido": r.get('caudal_total_extraido', 0) or 0
-            } for r in results
-        ]
+        results = execute_query(time_series_query, [utm_norte, utm_este])
 
-        data_obras_unicas = [
+        if not results:
+            raise HTTPException(status_code=404, detail="No se encontraron datos de altura limnimétrica para el punto UTM o período especificado.")
+
+        altura_por_tiempo = [
             {
-                "informante": r.get('informante', 'Desconocido'),
-                "cantidad_obras_unicas": r.get('cantidad_obras_unicas', 0)
+                "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
+                "altura_linimetrica": r.get('altura_linimetrica')
             } for r in results
         ]
 
         return {
-            "cuenca_identificador": cuenca_identificador,
-            "grafico_cantidad_registros_por_informante": data_registros,
-            "grafico_caudal_total_por_informante": data_caudal,
-            "grafico_cantidad_obras_unicas_por_informante": data_obras_unicas
+            "utm_norte": utm_norte,
+            "utm_este": utm_este,
+            "total_registros": total_count,
+            "registros_retornados": len(altura_por_tiempo),
+            "altura_por_tiempo": altura_por_tiempo
         }
 
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        logging.error(f"Error in get_informantes_por_cuenca: {e}")
+        logging.error(f"Error in get_altura_linimetrica_por_tiempo_por_punto: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get("/puntos/series_de_tiempo/nivel_freatico", tags=["puntos"])
+async def get_nivel_freatico_por_tiempo_por_punto(
+    utm_norte: int = Query(..., description="Coordenada UTM Norte del punto"),
+    utm_este: int = Query(..., description="Coordenada UTM Este del punto"),
+    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
+):
+    """Obtiene el nivel freático a lo largo del tiempo para un punto UTM específico"""
+    try:
+        # Build date filters
+        date_filter = ""
+        if fecha_inicio:
+            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+        if fecha_fin:
+            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+
+        # Get total count
+        count_query = f"""
+        SELECT COUNT(*) as total
+        FROM dw.FACT_Mediciones_Caudal
+        WHERE UTM_Norte = ?
+          AND UTM_Este = ?
+          AND Nivel_Freatico IS NOT NULL
+          {date_filter}
+        """
+
+        count_result = execute_query(count_query, [utm_norte, utm_este])
+        total_count = count_result[0]['total'] if count_result else 0
+
+        # Query time series data for nivel freático
+        time_series_query = f"""
+        SELECT
+            Fecha_Medicion as fecha_medicion,
+            Nivel_Freatico as nivel_freatico
+        FROM dw.FACT_Mediciones_Caudal
+        WHERE UTM_Norte = ?
+          AND UTM_Este = ?
+          AND Nivel_Freatico IS NOT NULL
+          {date_filter}
+        ORDER BY Fecha_Medicion DESC
+        """
+
+        results = execute_query(time_series_query, [utm_norte, utm_este])
+
+        if not results:
+            raise HTTPException(status_code=404, detail="No se encontraron datos de nivel freático para el punto UTM o período especificado.")
+
+        nivel_por_tiempo = [
+            {
+                "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
+                "nivel_freatico": r.get('nivel_freatico')
+            } for r in results
+        ]
+
+        return {
+            "utm_norte": utm_norte,
+            "utm_este": utm_este,
+            "total_registros": total_count,
+            "registros_retornados": len(nivel_por_tiempo),
+            "nivel_por_tiempo": nivel_por_tiempo
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logging.error(f"Error in get_nivel_freatico_por_tiempo_por_punto: {e}")
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+

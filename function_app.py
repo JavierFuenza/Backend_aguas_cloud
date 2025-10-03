@@ -31,8 +31,18 @@ async def main(req: func.HttpRequest) -> func.HttpResponse:
         # Extract path from the URL (remove /api prefix)
         parsed_url = urlparse(req.url)
         path = parsed_url.path
+
+        # Handle /api prefix removal, but preserve docs and openapi.json paths
         if path.startswith('/api'):
             path = path[4:]  # Remove /api prefix
+
+        # Special handling for FastAPI docs endpoints
+        # These need to be accessed without /api prefix
+        if path in ['', '/']:
+            path = '/'
+        elif path.startswith('/docs') or path.startswith('/redoc') or path.startswith('/openapi.json'):
+            # These paths are already correct, no modification needed
+            pass
 
         # Get query parameters
         query_params = parse_qs(parsed_url.query)
