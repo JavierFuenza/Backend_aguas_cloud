@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Aguas Transparentes API",
     description="Backend API for water resource data from Azure Synapse Analytics",
-    version="1.1.0",
+    version="1.3.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -396,10 +396,6 @@ async def get_puntos(
         SELECT
             UTM_Norte,
             UTM_Este,
-            Huso,
-            Region,
-            Provincia,
-            Comuna,
             es_pozo_subterraneo
         FROM dw.Puntos_Mapa
         WHERE UTM_Norte IS NOT NULL
@@ -419,10 +415,6 @@ async def get_puntos(
             puntos_out.append({
                 "utm_norte": punto["UTM_Norte"],
                 "utm_este": punto["UTM_Este"],
-                "huso": punto.get("Huso", 19),
-                "region": punto.get("Region"),
-                "provincia": punto.get("Provincia"),
-                "comuna": punto.get("Comuna"),
                 "es_pozo_subterraneo": bool(punto.get("es_pozo_subterraneo", 0))
             })
 
@@ -447,10 +439,6 @@ async def get_punto_info(
         SELECT
             UTM_Norte,
             UTM_Este,
-            Huso,
-            Region,
-            Provincia,
-            Comuna,
             es_pozo_subterraneo
         FROM dw.Puntos_Mapa
         WHERE UTM_Norte = ?
@@ -464,7 +452,7 @@ async def get_punto_info(
 
         punto = punto_result[0]
 
-        # Get cuenca info (simplified - get one cuenca)
+        # Get cuenca info based on UTM coordinates
         cuenca_query = """
         SELECT TOP 1
             Cod_Cuenca,
@@ -472,10 +460,10 @@ async def get_punto_info(
             Cod_Subcuenca,
             Nom_Subcuenca
         FROM dw.DIM_Cuenca
-        WHERE Nom_Cuenca IS NOT NULL
-        ORDER BY Cod_Cuenca
+        WHERE UTM_Norte = ?
+          AND UTM_Este = ?
         """
-        cuenca_result = execute_query(cuenca_query)
+        cuenca_result = execute_query(cuenca_query, [utm_norte, utm_este])
         cuenca = cuenca_result[0] if cuenca_result else {}
 
         # Get caudal statistics for this specific point
@@ -495,11 +483,14 @@ async def get_punto_info(
 
         # Build detailed response
         response = {
+            "utm_norte": utm_norte,
+            "utm_este": utm_este,
+            "es_pozo_subterraneo": bool(punto.get('es_pozo_subterraneo', 0)),
+            "cod_cuenca": cuenca.get('Cod_Cuenca'),
+            "cod_subcuenca": cuenca.get('Cod_Subcuenca'),
             "nombre_cuenca": cuenca.get('Nom_Cuenca'),
             "nombre_subcuenca": cuenca.get('Nom_Subcuenca'),
             "caudal_promedio": safe_round(caudal_stats.get('caudal_promedio')),
-            "caudal_minimo": safe_round(caudal_stats.get('caudal_minimo')),
-            "caudal_maximo": safe_round(caudal_stats.get('caudal_maximo')),
             "n_mediciones": caudal_stats.get('n_mediciones', 0)
         }
 
@@ -516,17 +507,17 @@ async def get_punto_info(
 async def get_unique_cuencas():
     """Obtiene cuencas, subcuencas y subsubcuencas únicas"""
     try:
-        # Query cuencas directly - get unique combinations
+        # Query from pre-aggregated table
         cuencas_query = """
-        SELECT DISTINCT
+        SELECT
             Cod_Cuenca as cod_cuenca,
             Nom_Cuenca as nom_cuenca,
             Cod_Subcuenca as cod_subcuenca,
             Nom_Subcuenca as nom_subcuenca,
             Cod_Subsubcuenca as cod_subsubcuenca,
-            Nom_Subsubcuenca as nom_subsubcuenca
-        FROM dw.DIM_Cuenca
-        WHERE Nom_Cuenca IS NOT NULL
+            Nom_Subsubcuenca as nom_subsubcuenca,
+            Cod_Region as cod_region
+        FROM dw.Cuencas_Regiones
         ORDER BY Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca
         """
 
@@ -537,6 +528,7 @@ async def get_unique_cuencas():
                 {
                     "cod_cuenca": r.get('cod_cuenca'),
                     "nom_cuenca": r.get('nom_cuenca'),
+                    "cod_region": r.get('cod_region'),
                     "cod_subcuenca": r.get('cod_subcuenca'),
                     "nom_subcuenca": r.get('nom_subcuenca'),
                     "cod_subsubcuenca": r.get('cod_subsubcuenca'),
@@ -582,7 +574,8 @@ async def get_atlas():
 async def get_cuencas_stats(
     cod_cuenca: Optional[int] = Query(None, description="Código de cuenca"),
     cod_subcuenca: Optional[int] = Query(None, description="Código de subcuenca"),
-    cod_subsubcuenca: Optional[int] = Query(None, description="Código de subsubcuenca")
+    cod_subsubcuenca: Optional[int] = Query(None, description="Código de subsubcuenca"),
+    include_global: bool = Query(False, description="Incluir estadísticas globales (puede ser lento)")
 ):
     """Obtiene estadísticas de caudal por cuenca, subcuenca o subsubcuenca desde tabla pre-agregada"""
     try:
@@ -603,7 +596,7 @@ async def get_cuencas_stats(
         # Build WHERE clause (if no filters, return all)
         where_clause = "WHERE " + " AND ".join(filters) if filters else ""
 
-        # Query pre-aggregated table for instant results
+        # Query pre-aggregated table (Cod_Region is now included in the table)
         stats_query = f"""
         SELECT
             Cod_Cuenca,
@@ -612,6 +605,7 @@ async def get_cuencas_stats(
             Nom_Subcuenca,
             Cod_Subsubcuenca,
             Nom_Subsubcuenca,
+            Cod_Region,
             caudal_promedio,
             caudal_minimo,
             caudal_maximo,
@@ -619,6 +613,7 @@ async def get_cuencas_stats(
             total_mediciones
         FROM dw.Cuenca_Stats
         {where_clause}
+        ORDER BY Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca
         """
 
         results = execute_query(stats_query, params)
@@ -626,24 +621,47 @@ async def get_cuencas_stats(
         if not results:
             return {"estadisticas": []}
 
-        # Return all results (can be multiple cuencas if no filter applied)
-        return {
-            "estadisticas": [
-                {
-                    "cod_cuenca": r.get('Cod_Cuenca'),
-                    "nom_cuenca": r.get('Nom_Cuenca'),
-                    "cod_subcuenca": r.get('Cod_Subcuenca'),
-                    "nom_subcuenca": r.get('Nom_Subcuenca'),
-                    "cod_subsubcuenca": r.get('Cod_Subsubcuenca'),
-                    "nom_subsubcuenca": r.get('Nom_Subsubcuenca'),
-                    "caudal_promedio": safe_round(r.get('caudal_promedio')),
-                    "caudal_minimo": safe_round(r.get('caudal_minimo')),
-                    "caudal_maximo": safe_round(r.get('caudal_maximo')),
-                    "total_puntos_unicos": r.get('total_puntos_unicos', 0),
-                    "total_mediciones": r.get('total_mediciones', 0)
-                } for r in results
-            ]
-        }
+        # Get global statistics only if requested
+        global_stats = {}
+        if include_global:
+            global_stats_query = """
+            SELECT
+                AVG(CAST(Caudal AS FLOAT)) as global_promedio,
+                MIN(CAST(Caudal AS FLOAT)) as global_minimo,
+                MAX(CAST(Caudal AS FLOAT)) as global_maximo
+            FROM dw.FACT_Mediciones_Caudal
+            WHERE Caudal IS NOT NULL
+            """
+            global_result = execute_query(global_stats_query)
+            global_stats = global_result[0] if global_result else {}
+
+        # Build response
+        estadisticas = []
+        for r in results:
+            stat = {
+                "cod_cuenca": r.get('Cod_Cuenca'),
+                "nom_cuenca": r.get('Nom_Cuenca'),
+                "cod_region": r.get('Cod_Region'),
+                "cod_subcuenca": r.get('Cod_Subcuenca'),
+                "nom_subcuenca": r.get('Nom_Subcuenca'),
+                "cod_subsubcuenca": r.get('Cod_Subsubcuenca'),
+                "nom_subsubcuenca": r.get('Nom_Subsubcuenca'),
+                "caudal_promedio": safe_round(r.get('caudal_promedio')),
+                "caudal_minimo": safe_round(r.get('caudal_minimo')),
+                "caudal_maximo": safe_round(r.get('caudal_maximo')),
+                "total_puntos_unicos": r.get('total_puntos_unicos', 0),
+                "total_mediciones": r.get('total_mediciones', 0)
+            }
+
+            # Add global stats only if requested
+            if include_global:
+                stat["global_promedio"] = safe_round(global_stats.get('global_promedio'))
+                stat["global_minimo"] = safe_round(global_stats.get('global_minimo'))
+                stat["global_maximo"] = safe_round(global_stats.get('global_maximo'))
+
+            estadisticas.append(stat)
+
+        return {"estadisticas": estadisticas}
 
     except Exception as e:
         logging.error(f"Error in get_cuencas_stats: {e}")
@@ -1443,38 +1461,93 @@ async def get_point_statistics(locations: List[UTMLocation]):
             # Single location analysis
             loc = locations[0]
 
-            stats_query = """
+            # Caudal statistics
+            caudal_stats_query = """
             SELECT
                 COUNT(*) as count,
-                AVG(CAST(Caudal AS FLOAT)) as avg_caudal,
-                MIN(CAST(Caudal AS FLOAT)) as min_caudal,
-                MAX(CAST(Caudal AS FLOAT)) as max_caudal,
-                STDEV(CAST(Caudal AS FLOAT)) as std_caudal
+                AVG(CAST(Caudal AS FLOAT)) as avg_val,
+                MIN(CAST(Caudal AS FLOAT)) as min_val,
+                MAX(CAST(Caudal AS FLOAT)) as max_val,
+                STDEV(CAST(Caudal AS FLOAT)) as std_val,
+                MIN(Fecha_Medicion) as primera_fecha,
+                MAX(Fecha_Medicion) as ultima_fecha
             FROM dw.FACT_Mediciones_Caudal
-            WHERE UTM_Norte = ?
-            AND UTM_Este = ?
-            AND Caudal IS NOT NULL
+            WHERE UTM_Norte = ? AND UTM_Este = ? AND Caudal IS NOT NULL
             """
+            caudal_result = execute_query(caudal_stats_query, [loc.utm_norte, loc.utm_este])
+            caudal_stats = caudal_result[0] if caudal_result else {}
 
-            results = execute_query(stats_query, [loc.utm_norte, loc.utm_este])
-            result = results[0] if results else {}
+            # Altura Limnimetrica statistics
+            altura_stats_query = """
+            SELECT
+                COUNT(*) as count,
+                AVG(CAST(Altura_Limnimetrica AS FLOAT)) as avg_val,
+                MIN(CAST(Altura_Limnimetrica AS FLOAT)) as min_val,
+                MAX(CAST(Altura_Limnimetrica AS FLOAT)) as max_val,
+                STDEV(CAST(Altura_Limnimetrica AS FLOAT)) as std_val,
+                MIN(Fecha_Medicion) as primera_fecha,
+                MAX(Fecha_Medicion) as ultima_fecha
+            FROM dw.FACT_Mediciones_Caudal
+            WHERE UTM_Norte = ? AND UTM_Este = ? AND Altura_Limnimetrica IS NOT NULL
+            """
+            altura_result = execute_query(altura_stats_query, [loc.utm_norte, loc.utm_este])
+            altura_stats = altura_result[0] if altura_result else {}
 
-            if result.get('count', 0) == 0:
-                return [{
-                    "utm_norte": loc.utm_norte,
-                    "utm_este": loc.utm_este,
-                    "message": "No se encontraron datos de caudal para las coordenadas UTM especificadas."
-                }]
-            else:
-                return [{
-                    "utm_norte": loc.utm_norte,
-                    "utm_este": loc.utm_este,
-                    "total_registros_con_caudal": result.get('count'),
-                    "caudal_promedio": round(result.get('avg_caudal', 0), 2) if result.get('avg_caudal') else None,
-                    "caudal_minimo": round(result.get('min_caudal', 0), 2) if result.get('min_caudal') else None,
-                    "caudal_maximo": round(result.get('max_caudal', 0), 2) if result.get('max_caudal') else None,
-                    "desviacion_estandar_caudal": round(result.get('std_caudal', 0), 2) if result.get('std_caudal') else None
-                }]
+            # Nivel Freatico statistics
+            nivel_stats_query = """
+            SELECT
+                COUNT(*) as count,
+                AVG(CAST(Nivel_Freatico AS FLOAT)) as avg_val,
+                MIN(CAST(Nivel_Freatico AS FLOAT)) as min_val,
+                MAX(CAST(Nivel_Freatico AS FLOAT)) as max_val,
+                STDEV(CAST(Nivel_Freatico AS FLOAT)) as std_val,
+                MIN(Fecha_Medicion) as primera_fecha,
+                MAX(Fecha_Medicion) as ultima_fecha
+            FROM dw.FACT_Mediciones_Caudal
+            WHERE UTM_Norte = ? AND UTM_Este = ? AND Nivel_Freatico IS NOT NULL
+            """
+            nivel_result = execute_query(nivel_stats_query, [loc.utm_norte, loc.utm_este])
+            nivel_stats = nivel_result[0] if nivel_result else {}
+
+            response = {
+                "utm_norte": loc.utm_norte,
+                "utm_este": loc.utm_este
+            }
+
+            if caudal_stats.get('count', 0) > 0:
+                response["caudal"] = {
+                    "total_registros": caudal_stats.get('count'),
+                    "promedio": round(caudal_stats.get('avg_val', 0), 2) if caudal_stats.get('avg_val') else None,
+                    "minimo": round(caudal_stats.get('min_val', 0), 2) if caudal_stats.get('min_val') else None,
+                    "maximo": round(caudal_stats.get('max_val', 0), 2) if caudal_stats.get('max_val') else None,
+                    "desviacion_estandar": round(caudal_stats.get('std_val', 0), 2) if caudal_stats.get('std_val') else None,
+                    "primera_fecha": str(caudal_stats.get('primera_fecha')) if caudal_stats.get('primera_fecha') else None,
+                    "ultima_fecha": str(caudal_stats.get('ultima_fecha')) if caudal_stats.get('ultima_fecha') else None
+                }
+
+            if altura_stats.get('count', 0) > 0:
+                response["altura_limnimetrica"] = {
+                    "total_registros": altura_stats.get('count'),
+                    "promedio": round(altura_stats.get('avg_val', 0), 2) if altura_stats.get('avg_val') else None,
+                    "minimo": round(altura_stats.get('min_val', 0), 2) if altura_stats.get('min_val') else None,
+                    "maximo": round(altura_stats.get('max_val', 0), 2) if altura_stats.get('max_val') else None,
+                    "desviacion_estandar": round(altura_stats.get('std_val', 0), 2) if altura_stats.get('std_val') else None,
+                    "primera_fecha": str(altura_stats.get('primera_fecha')) if altura_stats.get('primera_fecha') else None,
+                    "ultima_fecha": str(altura_stats.get('ultima_fecha')) if altura_stats.get('ultima_fecha') else None
+                }
+
+            if nivel_stats.get('count', 0) > 0:
+                response["nivel_freatico"] = {
+                    "total_registros": nivel_stats.get('count'),
+                    "promedio": round(nivel_stats.get('avg_val', 0), 2) if nivel_stats.get('avg_val') else None,
+                    "minimo": round(nivel_stats.get('min_val', 0), 2) if nivel_stats.get('min_val') else None,
+                    "maximo": round(nivel_stats.get('max_val', 0), 2) if nivel_stats.get('max_val') else None,
+                    "desviacion_estandar": round(nivel_stats.get('std_val', 0), 2) if nivel_stats.get('std_val') else None,
+                    "primera_fecha": str(nivel_stats.get('primera_fecha')) if nivel_stats.get('primera_fecha') else None,
+                    "ultima_fecha": str(nivel_stats.get('ultima_fecha')) if nivel_stats.get('ultima_fecha') else None
+                }
+
+            return [response]
         else:
             # Multiple locations analysis
             coords_conditions = " OR ".join([
