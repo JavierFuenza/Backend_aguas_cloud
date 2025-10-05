@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Aguas Transparentes API",
     description="Backend API for water resource data from Azure Synapse Analytics",
-    version="1.2.0",
+    version="1.3.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -507,20 +507,18 @@ async def get_punto_info(
 async def get_unique_cuencas():
     """Obtiene cuencas, subcuencas y subsubcuencas únicas"""
     try:
-        # Query cuencas with region info via JOIN with DIM_Geografia
+        # Query from pre-aggregated table
         cuencas_query = """
-        SELECT DISTINCT
-            c.Cod_Cuenca as cod_cuenca,
-            c.Nom_Cuenca as nom_cuenca,
-            c.Cod_Subcuenca as cod_subcuenca,
-            c.Nom_Subcuenca as nom_subcuenca,
-            c.Cod_Subsubcuenca as cod_subsubcuenca,
-            c.Nom_Subsubcuenca as nom_subsubcuenca,
-            g.Region as cod_region
-        FROM dw.DIM_Cuenca c
-        LEFT JOIN dw.DIM_Geografia g ON c.UTM_Norte = g.UTM_Norte AND c.UTM_Este = g.UTM_Este
-        WHERE c.Nom_Cuenca IS NOT NULL
-        ORDER BY c.Cod_Cuenca, c.Cod_Subcuenca, c.Cod_Subsubcuenca
+        SELECT
+            Cod_Cuenca as cod_cuenca,
+            Nom_Cuenca as nom_cuenca,
+            Cod_Subcuenca as cod_subcuenca,
+            Nom_Subcuenca as nom_subcuenca,
+            Cod_Subsubcuenca as cod_subsubcuenca,
+            Nom_Subsubcuenca as nom_subsubcuenca,
+            Cod_Region as cod_region
+        FROM dw.Cuencas_Regiones
+        ORDER BY Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca
         """
 
         results = execute_query(cuencas_query)
@@ -576,7 +574,8 @@ async def get_atlas():
 async def get_cuencas_stats(
     cod_cuenca: Optional[int] = Query(None, description="Código de cuenca"),
     cod_subcuenca: Optional[int] = Query(None, description="Código de subcuenca"),
-    cod_subsubcuenca: Optional[int] = Query(None, description="Código de subsubcuenca")
+    cod_subsubcuenca: Optional[int] = Query(None, description="Código de subsubcuenca"),
+    include_global: bool = Query(False, description="Incluir estadísticas globales (puede ser lento)")
 ):
     """Obtiene estadísticas de caudal por cuenca, subcuenca o subsubcuenca desde tabla pre-agregada"""
     try:
@@ -597,30 +596,24 @@ async def get_cuencas_stats(
         # Build WHERE clause (if no filters, return all)
         where_clause = "WHERE " + " AND ".join(filters) if filters else ""
 
-        # Query pre-aggregated table with region info
+        # Query pre-aggregated table (Cod_Region is now included in the table)
         stats_query = f"""
         SELECT
-            cs.Cod_Cuenca,
-            cs.Nom_Cuenca,
-            cs.Cod_Subcuenca,
-            cs.Nom_Subcuenca,
-            cs.Cod_Subsubcuenca,
-            cs.Nom_Subsubcuenca,
-            cs.caudal_promedio,
-            cs.caudal_minimo,
-            cs.caudal_maximo,
-            cs.total_puntos_unicos,
-            cs.total_mediciones,
-            g.Region as cod_region
-        FROM dw.Cuenca_Stats cs
-        LEFT JOIN dw.DIM_Cuenca c
-            ON cs.Cod_Cuenca = c.Cod_Cuenca
-            AND cs.Cod_Subcuenca = c.Cod_Subcuenca
-            AND (cs.Cod_Subsubcuenca = c.Cod_Subsubcuenca OR (cs.Cod_Subsubcuenca IS NULL AND c.Cod_Subsubcuenca IS NULL))
-        LEFT JOIN dw.DIM_Geografia g
-            ON c.UTM_Norte = g.UTM_Norte
-            AND c.UTM_Este = g.UTM_Este
+            Cod_Cuenca,
+            Nom_Cuenca,
+            Cod_Subcuenca,
+            Nom_Subcuenca,
+            Cod_Subsubcuenca,
+            Nom_Subsubcuenca,
+            Cod_Region,
+            caudal_promedio,
+            caudal_minimo,
+            caudal_maximo,
+            total_puntos_unicos,
+            total_mediciones
+        FROM dw.Cuenca_Stats
         {where_clause}
+        ORDER BY Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca
         """
 
         results = execute_query(stats_query, params)
@@ -628,40 +621,47 @@ async def get_cuencas_stats(
         if not results:
             return {"estadisticas": []}
 
-        # Get global statistics once
-        global_stats_query = """
-        SELECT
-            AVG(CAST(Caudal AS FLOAT)) as global_promedio,
-            MIN(CAST(Caudal AS FLOAT)) as global_minimo,
-            MAX(CAST(Caudal AS FLOAT)) as global_maximo
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE Caudal IS NOT NULL
-        """
-        global_result = execute_query(global_stats_query)
-        global_stats = global_result[0] if global_result else {}
+        # Get global statistics only if requested
+        global_stats = {}
+        if include_global:
+            global_stats_query = """
+            SELECT
+                AVG(CAST(Caudal AS FLOAT)) as global_promedio,
+                MIN(CAST(Caudal AS FLOAT)) as global_minimo,
+                MAX(CAST(Caudal AS FLOAT)) as global_maximo
+            FROM dw.FACT_Mediciones_Caudal
+            WHERE Caudal IS NOT NULL
+            """
+            global_result = execute_query(global_stats_query)
+            global_stats = global_result[0] if global_result else {}
 
-        # Return all results with global stats
-        return {
-            "estadisticas": [
-                {
-                    "cod_cuenca": r.get('Cod_Cuenca'),
-                    "nom_cuenca": r.get('Nom_Cuenca'),
-                    "cod_region": r.get('cod_region'),
-                    "cod_subcuenca": r.get('Cod_Subcuenca'),
-                    "nom_subcuenca": r.get('Nom_Subcuenca'),
-                    "cod_subsubcuenca": r.get('Cod_Subsubcuenca'),
-                    "nom_subsubcuenca": r.get('Nom_Subsubcuenca'),
-                    "caudal_promedio": safe_round(r.get('caudal_promedio')),
-                    "caudal_minimo": safe_round(r.get('caudal_minimo')),
-                    "caudal_maximo": safe_round(r.get('caudal_maximo')),
-                    "total_puntos_unicos": r.get('total_puntos_unicos', 0),
-                    "total_mediciones": r.get('total_mediciones', 0),
-                    "global_promedio": safe_round(global_stats.get('global_promedio')),
-                    "global_minimo": safe_round(global_stats.get('global_minimo')),
-                    "global_maximo": safe_round(global_stats.get('global_maximo'))
-                } for r in results
-            ]
-        }
+        # Build response
+        estadisticas = []
+        for r in results:
+            stat = {
+                "cod_cuenca": r.get('Cod_Cuenca'),
+                "nom_cuenca": r.get('Nom_Cuenca'),
+                "cod_region": r.get('Cod_Region'),
+                "cod_subcuenca": r.get('Cod_Subcuenca'),
+                "nom_subcuenca": r.get('Nom_Subcuenca'),
+                "cod_subsubcuenca": r.get('Cod_Subsubcuenca'),
+                "nom_subsubcuenca": r.get('Nom_Subsubcuenca'),
+                "caudal_promedio": safe_round(r.get('caudal_promedio')),
+                "caudal_minimo": safe_round(r.get('caudal_minimo')),
+                "caudal_maximo": safe_round(r.get('caudal_maximo')),
+                "total_puntos_unicos": r.get('total_puntos_unicos', 0),
+                "total_mediciones": r.get('total_mediciones', 0)
+            }
+
+            # Add global stats only if requested
+            if include_global:
+                stat["global_promedio"] = safe_round(global_stats.get('global_promedio'))
+                stat["global_minimo"] = safe_round(global_stats.get('global_minimo'))
+                stat["global_maximo"] = safe_round(global_stats.get('global_maximo'))
+
+            estadisticas.append(stat)
+
+        return {"estadisticas": estadisticas}
 
     except Exception as e:
         logging.error(f"Error in get_cuencas_stats: {e}")
