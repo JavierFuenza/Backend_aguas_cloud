@@ -53,15 +53,47 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logging.error(f"Error closing connection: {e}")
 
+tags_metadata = [
+    {
+        "name": "System",
+        "description": "Endpoints de sistema y diagnóstico para verificar el estado del servicio y la base de datos.",
+    },
+    {
+        "name": "Puntos de Medición",
+        "description": "Consulta de puntos de medición con coordenadas UTM, información de cuenca y estadísticas de caudal.",
+    },
+    {
+        "name": "Cuencas Hidrográficas",
+        "description": "Información sobre cuencas, subcuencas y subsubcuencas hidrográficas, incluyendo estadísticas agregadas.",
+    },
+    {
+        "name": "Series Temporales",
+        "description": "Series temporales de caudal, altura limnimétrica y nivel freático por cuenca, subcuenca o punto específico.",
+    },
+    {
+        "name": "Atlas",
+        "description": "Divisiones administrativas (regiones, provincias y comunas) disponibles en el sistema.",
+    },
+    {
+        "name": "Cache y Rendimiento",
+        "description": "Gestión de caché y optimización del rendimiento de consultas.",
+    },
+]
+
 app = FastAPI(
     title="Aguas Transparentes API",
-    description="Backend API for water resource data from Azure Synapse Analytics",
+    description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
     version="1.3.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
     openapi_url="/openapi.json",
-    root_path="/api"  # This tells FastAPI it's behind /api prefix
+    root_path="/api",
+    openapi_tags=tags_metadata,
+    contact={
+        "name": "Aguas Transparentes",
+        "url": "https://github.com/JavierFuenza/Backend_aguas_cloud",
+    }
 )
 
 app.add_middleware(
@@ -75,44 +107,160 @@ app.add_middleware(
 
 # Pydantic Models for Request/Response validation
 class UTMLocation(BaseModel):
-    utm_norte: int = Field(..., ge=0, le=10000000, description="UTM Norte coordinate")
-    utm_este: int = Field(..., ge=0, le=1000000, description="UTM Este coordinate")
+    utm_norte: int = Field(..., ge=0, le=10000000, description="Coordenada UTM Norte (metros)")
+    utm_este: int = Field(..., ge=0, le=1000000, description="Coordenada UTM Este (metros)")
 
-class PuntoData(BaseModel):
-    lat: Optional[float] = None
-    lon: Optional[float] = None
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "utm_norte": 6300000,
+                "utm_este": 350000
+            }
+        }
+
+class PuntoResponse(BaseModel):
+    utm_norte: int = Field(..., description="Coordenada UTM Norte")
+    utm_este: int = Field(..., description="Coordenada UTM Este")
+    es_pozo_subterraneo: bool = Field(..., description="Indica si es un pozo subterráneo")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "utm_norte": 6300000,
+                "utm_este": 350000,
+                "es_pozo_subterraneo": False
+            }
+        }
+
+class PuntoInfoResponse(BaseModel):
     utm_norte: int
     utm_este: int
-    huso: int
-    region: int
-    provincia: int
-    comuna: int
-    nombre_cuenca: str
-    nombre_subcuenca: Optional[str]
-    cod_cuenca: int
-    cod_subcuenca: Optional[int]
-    caudal_promedio: Optional[float]
-    n_mediciones: int
-    tipoPunto: Dict[str, Any]
+    es_pozo_subterraneo: bool
+    cod_cuenca: Optional[int] = None
+    cod_subcuenca: Optional[int] = None
+    nombre_cuenca: Optional[str] = None
+    nombre_subcuenca: Optional[str] = None
+    caudal_promedio: Optional[float] = Field(None, description="Caudal promedio en l/s")
+    n_mediciones: int = Field(..., description="Número de mediciones registradas")
 
-class CuencaStats(BaseModel):
-    nom_cuenca: str
-    cod_cuenca: int
-    nom_subcuenca: Optional[str]
-    cod_subcuenca: Optional[int]
-    cod_region: int
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "utm_norte": 6300000,
+                "utm_este": 350000,
+                "es_pozo_subterraneo": False,
+                "cod_cuenca": 101,
+                "cod_subcuenca": 10101,
+                "nombre_cuenca": "Río Lluta",
+                "nombre_subcuenca": "Río Lluta Alto",
+                "caudal_promedio": 25.5,
+                "n_mediciones": 120
+            }
+        }
+
+class CuencaData(BaseModel):
+    cod_cuenca: Optional[int] = Field(None, description="Código de cuenca")
+    nom_cuenca: Optional[str] = Field(None, description="Nombre de cuenca")
+    cod_subcuenca: Optional[int] = Field(None, description="Código de subcuenca")
+    nom_subcuenca: Optional[str] = Field(None, description="Nombre de subcuenca")
+    cod_subsubcuenca: Optional[int] = Field(None, description="Código de subsubcuenca")
+    nom_subsubcuenca: Optional[str] = Field(None, description="Nombre de subsubcuenca")
+    cod_region: Optional[int] = Field(None, description="Código de región")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "cod_cuenca": 101,
+                "nom_cuenca": "Río Lluta",
+                "cod_subcuenca": 10101,
+                "nom_subcuenca": "Río Lluta Alto",
+                "cod_subsubcuenca": None,
+                "nom_subsubcuenca": None,
+                "cod_region": 15
+            }
+        }
+
+class CuencaStatsResponse(BaseModel):
+    cod_cuenca: Optional[int]
+    nom_cuenca: Optional[str]
+    cod_region: Optional[int]
+    cod_subcuenca: Optional[int] = None
+    nom_subcuenca: Optional[str] = None
+    cod_subsubcuenca: Optional[int] = None
+    nom_subsubcuenca: Optional[str] = None
+    caudal_promedio: Optional[float] = Field(None, description="Caudal promedio en l/s")
+    caudal_minimo: Optional[float] = Field(None, description="Caudal mínimo registrado en l/s")
+    caudal_maximo: Optional[float] = Field(None, description="Caudal máximo registrado en l/s")
+    total_puntos_unicos: int = Field(..., description="Número de puntos únicos de medición")
+    total_mediciones: int = Field(..., description="Número total de mediciones")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "cod_cuenca": 101,
+                "nom_cuenca": "Río Lluta",
+                "cod_region": 15,
+                "cod_subcuenca": None,
+                "nom_subcuenca": None,
+                "cod_subsubcuenca": None,
+                "nom_subsubcuenca": None,
+                "caudal_promedio": 45.3,
+                "caudal_minimo": 5.2,
+                "caudal_maximo": 120.5,
+                "total_puntos_unicos": 15,
+                "total_mediciones": 1850
+            }
+        }
 
 class TimeSeriesPoint(BaseModel):
-    fecha_medicion: str
-    caudal: Optional[float]
+    fecha_medicion: str = Field(..., description="Fecha de medición (ISO format)")
+    caudal: Optional[float] = Field(None, description="Caudal medido en l/s")
 
-class CaudalAnalysis(BaseModel):
-    cuenca_identificador: str
-    total_registros_con_caudal: int
-    caudal_promedio: Optional[float]
-    caudal_minimo: Optional[float]
-    caudal_maximo: Optional[float]
-    desviacion_estandar_caudal: Optional[float]
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "fecha_medicion": "2023-06-15",
+                "caudal": 35.2
+            }
+        }
+
+class AlturaTimeSeriesPoint(BaseModel):
+    fecha_medicion: str = Field(..., description="Fecha de medición (ISO format)")
+    altura_linimetrica: Optional[float] = Field(None, description="Altura limnimétrica en metros")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "fecha_medicion": "2023-06-15",
+                "altura_linimetrica": 2.5
+            }
+        }
+
+class NivelFreaticoTimeSeriesPoint(BaseModel):
+    fecha_medicion: str = Field(..., description="Fecha de medición (ISO format)")
+    nivel_freatico: Optional[float] = Field(None, description="Nivel freático en metros")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "fecha_medicion": "2023-06-15",
+                "nivel_freatico": 15.3
+            }
+        }
+
+class HealthResponse(BaseModel):
+    status: str = Field(..., description="Estado del servicio")
+    message: str = Field(..., description="Mensaje descriptivo")
+    database: str = Field(..., description="Estado de la conexión a base de datos")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "status": "healthy",
+                "message": "Water Data API is running",
+                "database": "connected"
+            }
+        }
 
 # Utility functions for data processing
 def build_full_name(nomb_inf: Optional[str], a_pat_inf: Optional[str], a_mat_inf: Optional[str]) -> str:
@@ -248,7 +396,13 @@ def utm_to_latlon(utm_este: float, utm_norte: float, huso: int = 19) -> tuple:
     except:
         return None, None
 
-@app.get("/health", tags=["System"])
+@app.get(
+    "/health",
+    tags=["System"],
+    response_model=HealthResponse,
+    summary="Verificación de estado del servicio",
+    description="Verifica el estado del servicio API y la conectividad con la base de datos Azure Synapse. Retorna el estado del servicio y de la conexión a base de datos."
+)
 async def health_check():
     """Health check endpoint with database connectivity test"""
     try:
@@ -329,7 +483,12 @@ async def get_puntos_count(region: Optional[int] = Query(None)):
         logging.error(f"Error in get_puntos_count: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cache/stats", tags=["cache"])
+@app.get(
+    "/cache/stats",
+    tags=["Cache y Rendimiento"],
+    summary="Estadísticas del sistema de caché",
+    description="Obtiene estadísticas del sistema de caché en memoria. Incluye número de consultas cacheadas, claves activas, tamaño de cada caché y conexiones disponibles en el pool."
+)
 async def get_cache_stats():
     """Get cache statistics"""
     return {
@@ -339,7 +498,12 @@ async def get_cache_stats():
         "pool_connections": connection_pool.qsize() if connection_pool else 0
     }
 
-@app.post("/cache/clear", tags=["cache"])
+@app.post(
+    "/cache/clear",
+    tags=["Cache y Rendimiento"],
+    summary="Limpiar caché del sistema",
+    description="Elimina todos los datos almacenados en la caché del sistema. Las próximas consultas consultarán directamente la base de datos y el caché se reconstruirá automáticamente."
+)
 async def clear_cache():
     """Clear all cached data"""
     global memory_cache, cache_timestamps
@@ -347,7 +511,12 @@ async def clear_cache():
     cache_timestamps.clear()
     return {"message": "Cache cleared successfully"}
 
-@app.get("/performance/warm-up", tags=["performance"])
+@app.get(
+    "/performance/warm-up",
+    tags=["Cache y Rendimiento"],
+    summary="Pre-calentar caché del sistema",
+    description="Pre-carga las consultas más frecuentes en el caché para mejorar el rendimiento. Útil al iniciar el sistema o después de limpiar el caché."
+)
 async def warm_up_cache():
     """Pre-warm frequently accessed data"""
     try:
@@ -376,9 +545,15 @@ async def warm_up_cache():
         logging.error(f"Cache warm-up failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/puntos", tags=["puntos"])
+@app.get(
+    "/puntos",
+    tags=["Puntos de Medición"],
+    response_model=List[PuntoResponse],
+    summary="Obtener puntos de medición",
+    description="Obtiene la lista de puntos de medición con coordenadas UTM e indicador de pozo subterráneo. Puede filtrarse por región."
+)
 async def get_puntos(
-    region: Optional[int] = Query(None)
+    region: Optional[int] = Query(None, description="Código de región (ej: 15 para Arica y Parinacota)")
 ):
     """Obtiene puntos desde la tabla pre-agregada Puntos_Mapa"""
     try:
@@ -425,10 +600,16 @@ async def get_puntos(
         logging.error(f"Error en get_puntos: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/puntos/info", tags=["puntos"])
+@app.get(
+    "/puntos/info",
+    tags=["Puntos de Medición"],
+    response_model=PuntoInfoResponse,
+    summary="Información detallada de un punto",
+    description="Obtiene información detallada de un punto de medición específico incluyendo cuenca, subcuenca y estadísticas de caudal. Requiere coordenadas UTM Norte y Este."
+)
 async def get_punto_info(
-    utm_norte: int = Query(..., description="Coordenada UTM Norte del punto"),
-    utm_este: int = Query(..., description="Coordenada UTM Este del punto")
+    utm_norte: int = Query(..., description="Coordenada UTM Norte en metros", example=6300000),
+    utm_este: int = Query(..., description="Coordenada UTM Este en metros", example=350000)
 ):
     """Obtiene información detallada de un punto específico incluyendo cuenca y caudal"""
     try:
@@ -503,7 +684,12 @@ async def get_punto_info(
         logging.error(f"Error en get_punto_info: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas", tags=["cuencas"])
+@app.get(
+    "/cuencas",
+    tags=["Cuencas Hidrográficas"],
+    summary="Listado de cuencas hidrográficas",
+    description="Obtiene el listado completo de cuencas, subcuencas y subsubcuencas hidrográficas con sus códigos, nombres y región asociada."
+)
 async def get_unique_cuencas():
     """Obtiene cuencas, subcuencas y subsubcuencas únicas"""
     try:
@@ -540,7 +726,12 @@ async def get_unique_cuencas():
         logging.error(f"Error in get_unique_cuencas: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/atlas", tags=["atlas"])
+@app.get(
+    "/atlas",
+    tags=["Atlas"],
+    summary="Divisiones administrativas de Chile",
+    description="Obtiene el listado de divisiones administrativas disponibles: regiones, provincias y comunas."
+)
 async def get_atlas():
     """Obtiene regiones, provincias y comunas únicas"""
     try:
@@ -570,12 +761,17 @@ async def get_atlas():
         logging.error(f"Error in get_atlas: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/stats", tags=["cuencas"])
+@app.get(
+    "/cuencas/stats",
+    tags=["Cuencas Hidrográficas"],
+    summary="Estadísticas de caudal por cuenca",
+    description="Obtiene estadísticas de caudal agregadas por cuenca, subcuenca o subsubcuenca. Incluye caudal promedio, mínimo, máximo, total de puntos y mediciones. Opcionalmente incluye estadísticas globales del sistema."
+)
 async def get_cuencas_stats(
-    cod_cuenca: Optional[int] = Query(None, description="Código de cuenca"),
-    cod_subcuenca: Optional[int] = Query(None, description="Código de subcuenca"),
+    cod_cuenca: Optional[int] = Query(None, description="Código de cuenca", example=101),
+    cod_subcuenca: Optional[int] = Query(None, description="Código de subcuenca", example=10101),
     cod_subsubcuenca: Optional[int] = Query(None, description="Código de subsubcuenca"),
-    include_global: bool = Query(False, description="Incluir estadísticas globales (puede ser lento)")
+    include_global: bool = Query(False, description="Incluir estadísticas globales del sistema completo")
 ):
     """Obtiene estadísticas de caudal por cuenca, subcuenca o subsubcuenca desde tabla pre-agregada"""
     try:
@@ -667,11 +863,16 @@ async def get_cuencas_stats(
         logging.error(f"Error in get_cuencas_stats: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/cuenca/series_de_tiempo/caudal", tags=["cuencas"])
+@app.get(
+    "/cuencas/cuenca/series_de_tiempo/caudal",
+    tags=["Series Temporales"],
+    summary="Serie temporal de caudal por cuenca",
+    description="Obtiene la serie temporal de caudal para una cuenca específica (máximo 1000 registros más recientes). Acepta código numérico o nombre de cuenca. Opcionalmente filtra por rango de fechas (YYYY-MM-DD)."
+)
 async def get_caudal_por_tiempo_por_cuenca(
-    cuenca_identificador: str = Query(..., description="Código o nombre de la cuenca"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
+    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
+    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31")
 ):
     """Obtiene el caudal extraído a lo largo del tiempo para una cuenca específica"""
     try:
