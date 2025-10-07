@@ -89,7 +89,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.5.0",
+    version="1.5.1",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -127,6 +127,7 @@ class UTMLocation(BaseModel):
 class PuntoResponse(BaseModel):
     utm_norte: int = Field(..., description="Coordenada UTM Norte")
     utm_este: int = Field(..., description="Coordenada UTM Este")
+    huso: int = Field(..., description="Huso UTM (zona)")
     es_pozo_subterraneo: bool = Field(..., description="Indica si es un pozo subterráneo")
 
     class Config:
@@ -134,6 +135,7 @@ class PuntoResponse(BaseModel):
             "example": {
                 "utm_norte": 6300000,
                 "utm_este": 350000,
+                "huso": 19,
                 "es_pozo_subterraneo": False
             }
         }
@@ -141,6 +143,7 @@ class PuntoResponse(BaseModel):
 class PuntoInfoResponse(BaseModel):
     utm_norte: int
     utm_este: int
+    huso: int
     es_pozo_subterraneo: bool
     cod_cuenca: Optional[int] = None
     cod_subcuenca: Optional[int] = None
@@ -154,6 +157,7 @@ class PuntoInfoResponse(BaseModel):
             "example": {
                 "utm_norte": 6300000,
                 "utm_este": 350000,
+                "huso": 19,
                 "es_pozo_subterraneo": False,
                 "cod_cuenca": 101,
                 "cod_subcuenca": 10101,
@@ -607,6 +611,7 @@ async def get_puntos(
         SELECT
             UTM_Norte,
             UTM_Este,
+            Huso,
             es_pozo_subterraneo
         FROM dw.Puntos_Mapa
         WHERE UTM_Norte IS NOT NULL
@@ -654,6 +659,7 @@ async def get_puntos(
             puntos_out.append({
                 "utm_norte": punto["UTM_Norte"],
                 "utm_este": punto["UTM_Este"],
+                "huso": punto["Huso"],
                 "es_pozo_subterraneo": bool(punto.get("es_pozo_subterraneo", 0))
             })
 
@@ -684,6 +690,7 @@ async def get_punto_info(
         SELECT
             UTM_Norte,
             UTM_Este,
+            Huso,
             es_pozo_subterraneo
         FROM dw.Puntos_Mapa
         WHERE UTM_Norte = ?
@@ -730,6 +737,7 @@ async def get_punto_info(
         response = {
             "utm_norte": utm_norte,
             "utm_este": utm_este,
+            "huso": punto.get('Huso'),
             "es_pozo_subterraneo": bool(punto.get('es_pozo_subterraneo', 0)),
             "cod_cuenca": cuenca.get('Cod_Cuenca'),
             "cod_subcuenca": cuenca.get('Cod_Subcuenca'),
