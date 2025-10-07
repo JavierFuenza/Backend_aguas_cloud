@@ -16,7 +16,13 @@ from asyncio_pool import AioPool
 import threading
 from queue import Queue, Empty
 
-load_dotenv()
+# Load .env only in development (Azure provides env vars automatically)
+# Azure sets WEBSITE_INSTANCE_ID when running in App Service/Functions
+if not os.getenv('WEBSITE_INSTANCE_ID'):
+    load_dotenv()
+    logging.info("Running in development mode - loaded .env file")
+else:
+    logging.info("Running in Azure - using Application Settings")
 
 # Global connection pool and cache
 connection_pool: Optional[Queue] = None
@@ -60,7 +66,7 @@ tags_metadata = [
     },
     {
         "name": "Puntos de Medición",
-        "description": "Consulta de puntos de medición con coordenadas UTM, información de cuenca y estadísticas de caudal.",
+        "description": "Consulta de puntos de medición con coordenadas UTM, información de cuenca y estadísticas de caudal. Soporta filtros por región, cuenca, subcuenca y rangos de caudal.",
     },
     {
         "name": "Cuencas Hidrográficas",
@@ -83,7 +89,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.3.0",
+    version="1.5.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -447,11 +453,18 @@ async def get_obras_count():
         logging.error(f"Error in get_obras_count: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/puntos/count", tags=["puntos"])
-async def get_puntos_count(region: Optional[int] = Query(None)):
-    """Obtiene el número de puntos únicos desde Puntos_Mapa"""
+@app.get("/puntos/count", tags=["Puntos de Medición"])
+async def get_puntos_count(
+    region: Optional[int] = Query(None),
+    cod_cuenca: Optional[int] = Query(None),
+    cod_subcuenca: Optional[int] = Query(None),
+    filtro_null_subcuenca: Optional[bool] = Query(None, description="Si es True, filtra por subcuenca nula"),
+    caudal_minimo: Optional[float] = Query(None),
+    caudal_maximo: Optional[float] = Query(None)
+):
+    """Obtiene el número de puntos únicos desde Puntos_Mapa con filtros"""
     try:
-        logging.info(f"Contando puntos con region: {region}")
+        logging.info(f"Contando puntos con filtros")
 
         count_query = """
         SELECT COUNT(*) as total_puntos_unicos
@@ -460,9 +473,29 @@ async def get_puntos_count(region: Optional[int] = Query(None)):
         """
 
         query_params = []
-        if region:
+
+        if region is not None:
             count_query += " AND Region = ?"
             query_params.append(region)
+
+        if cod_cuenca is not None:
+            count_query += " AND Cod_Cuenca = ?"
+            query_params.append(cod_cuenca)
+
+        # Handle subcuenca filtering logic
+        if filtro_null_subcuenca:
+            count_query += " AND Cod_Subcuenca IS NULL"
+        elif cod_subcuenca is not None:
+            count_query += " AND Cod_Subcuenca = ?"
+            query_params.append(cod_subcuenca)
+
+        if caudal_minimo is not None:
+            count_query += " AND caudal_promedio >= ?"
+            query_params.append(caudal_minimo)
+
+        if caudal_maximo is not None:
+            count_query += " AND caudal_promedio <= ?"
+            query_params.append(caudal_maximo)
 
         logging.info(f"Ejecutando query count: {count_query}")
         results = execute_query(count_query, query_params)
@@ -472,7 +505,12 @@ async def get_puntos_count(region: Optional[int] = Query(None)):
         response = {
             "total_puntos_unicos": total_puntos,
             "filtros_aplicados": {
-                "region": region
+                "region": region,
+                "cod_cuenca": cod_cuenca,
+                "cod_subcuenca": cod_subcuenca,
+                "filtro_null_subcuenca": filtro_null_subcuenca,
+                "caudal_minimo": caudal_minimo,
+                "caudal_maximo": caudal_maximo
             }
         }
 
@@ -550,24 +588,22 @@ async def warm_up_cache():
     tags=["Puntos de Medición"],
     response_model=List[PuntoResponse],
     summary="Obtener puntos de medición",
-    description="Obtiene la lista de puntos de medición con coordenadas UTM e indicador de pozo subterráneo. Puede filtrarse por región."
+    description="Obtiene la lista de puntos de medición con coordenadas UTM e indicador de pozo subterráneo. Soporta filtros por región, cuenca, subcuenca, caudal y más."
 )
 async def get_puntos(
-    region: Optional[int] = Query(None, description="Código de región (ej: 15 para Arica y Parinacota)")
+    region: Optional[int] = Query(None, description="Código de región (ej: 15 para Arica y Parinacota)"),
+    cod_cuenca: Optional[int] = Query(None, description="Código de cuenca"),
+    cod_subcuenca: Optional[int] = Query(None, description="Código de subcuenca"),
+    filtro_null_subcuenca: Optional[bool] = Query(None, description="Si es True, filtra por subcuenca nula. Ignora 'cod_subcuenca' si es True."),
+    caudal_minimo: Optional[float] = Query(None, description="Caudal promedio mínimo (l/s)"),
+    caudal_maximo: Optional[float] = Query(None, description="Caudal promedio máximo (l/s)"),
+    limit: Optional[int] = Query(120, description="Número máximo de puntos a retornar")
 ):
-    """Obtiene puntos desde la tabla pre-agregada Puntos_Mapa"""
+    """Obtiene puntos desde la tabla pre-agregada Puntos_Mapa con filtros"""
     try:
-        logging.info(f"Parametros recibidos en /puntos: region={region}")
+        logging.info(f"Parametros recibidos en /puntos: region={region}, cod_cuenca={cod_cuenca}, cod_subcuenca={cod_subcuenca}")
 
-        query_params = []
-        region_filter = ""
-
-        if region:
-            region_filter = " AND Region = ?"
-            query_params.append(region)
-
-        # Query the pre-aggregated table
-        puntos_query = f"""
+        puntos_query = """
         SELECT
             UTM_Norte,
             UTM_Este,
@@ -575,8 +611,36 @@ async def get_puntos(
         FROM dw.Puntos_Mapa
         WHERE UTM_Norte IS NOT NULL
           AND UTM_Este IS NOT NULL
-          {region_filter}
         """
+
+        query_params = []
+
+        if region is not None:
+            puntos_query += " AND Region = ?"
+            query_params.append(region)
+
+        if cod_cuenca is not None:
+            puntos_query += " AND Cod_Cuenca = ?"
+            query_params.append(cod_cuenca)
+
+        # Handle subcuenca filtering logic
+        if filtro_null_subcuenca:
+            puntos_query += " AND Cod_Subcuenca IS NULL"
+        elif cod_subcuenca is not None:
+            puntos_query += " AND Cod_Subcuenca = ?"
+            query_params.append(cod_subcuenca)
+
+        if caudal_minimo is not None:
+            puntos_query += " AND caudal_promedio >= ?"
+            query_params.append(caudal_minimo)
+
+        if caudal_maximo is not None:
+            puntos_query += " AND caudal_promedio <= ?"
+            query_params.append(caudal_maximo)
+
+        # Apply limit
+        if limit is not None:
+            puntos_query = f"SELECT TOP {limit} * FROM ({puntos_query}) AS filtered_puntos"
 
         logging.info(f"Ejecutando query desde Puntos_Mapa: {puntos_query}")
         puntos = execute_query(puntos_query, query_params)
@@ -759,6 +823,76 @@ async def get_atlas():
         }
     except Exception as e:
         logging.error(f"Error in get_atlas: {e}")
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get(
+    "/filtrosreactivos",
+    tags=["Cuencas Hidrográficas"],
+    summary="Estadísticas de caudal para filtros reactivos",
+    description="Obtiene estadísticas de caudal mínimo y máximo agregadas globalmente, por cuenca y por subcuenca. Usado para configurar filtros reactivos en el frontend."
+)
+async def get_filtros_reactivos():
+    """Obtiene estadísticas de caudal para filtros reactivos desde tabla pre-agregada"""
+    try:
+        # Query the pre-aggregated table
+        stats_query = """
+        SELECT
+            nivel,
+            nom_cuenca,
+            nom_subcuenca,
+            avgMin,
+            avgMax,
+            total_puntos
+        FROM dw.Filtros_Reactivos_Stats
+        ORDER BY
+            CASE nivel
+                WHEN 'global' THEN 1
+                WHEN 'cuenca' THEN 2
+                WHEN 'subcuenca' THEN 3
+            END,
+            nom_cuenca,
+            nom_subcuenca
+        """
+        results = execute_query(stats_query)
+
+        # Separate results by nivel
+        global_stats = {}
+        cuenca_stats = []
+        subcuenca_stats = []
+
+        for r in results:
+            nivel = r.get('nivel')
+            if nivel == 'global':
+                global_stats = {
+                    "avgMin": safe_round(r.get('avgMin')),
+                    "avgMax": safe_round(r.get('avgMax')),
+                    "total_puntos_unicos": r.get('total_puntos', 0)
+                }
+            elif nivel == 'cuenca':
+                cuenca_stats.append({
+                    "nom_cuenca": r.get('nom_cuenca'),
+                    "avgMin": safe_round(r.get('avgMin')),
+                    "avgMax": safe_round(r.get('avgMax')),
+                    "total_puntos": r.get('total_puntos', 0)
+                })
+            elif nivel == 'subcuenca':
+                subcuenca_stats.append({
+                    "nom_cuenca": r.get('nom_cuenca'),
+                    "nom_subcuenca": r.get('nom_subcuenca'),
+                    "avgMin": safe_round(r.get('avgMin')),
+                    "avgMax": safe_round(r.get('avgMax')),
+                    "total_puntos": r.get('total_puntos', 0)
+                })
+
+        return {
+            "estadisticas": {
+                "caudal_global": global_stats,
+                "caudal_por_cuenca": cuenca_stats,
+                "caudal_por_subcuenca": subcuenca_stats
+            }
+        }
+    except Exception as e:
+        logging.error(f"Error in get_filtros_reactivos: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
 @app.get(
@@ -947,7 +1081,7 @@ async def get_caudal_por_tiempo_por_cuenca(
         logging.error(f"Error in get_caudal_por_tiempo_por_cuenca: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/subcuenca/series_de_tiempo/caudal", tags=["cuencas"])
+@app.get("/cuencas/subcuenca/series_de_tiempo/caudal", tags=["Series Temporales"])
 async def get_caudal_por_tiempo_por_subcuenca(
     cuenca_identificador: str = Query(..., description="Código o nombre de la subcuenca"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
@@ -1026,7 +1160,7 @@ async def get_caudal_por_tiempo_por_subcuenca(
         logging.error(f"Error in get_caudal_por_tiempo_por_subcuenca: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/subsubcuenca/series_de_tiempo/caudal", tags=["cuencas"])
+@app.get("/cuencas/subsubcuenca/series_de_tiempo/caudal", tags=["Series Temporales"])
 async def get_caudal_por_tiempo_por_subsubcuenca(
     cuenca_identificador: str = Query(..., description="Código o nombre de la subsubcuenca"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
@@ -1105,7 +1239,7 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
         logging.error(f"Error in get_caudal_por_tiempo_por_subsubcuenca: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/cuenca/series_de_tiempo/altura_linimetrica", tags=["cuencas"])
+@app.get("/cuencas/cuenca/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"])
 async def get_altura_linimetrica_por_tiempo_por_cuenca(
     cuenca_identificador: str = Query(..., description="Código o nombre de la cuenca"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
@@ -1196,7 +1330,7 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
         logging.error(f"Error in get_altura_linimetrica_por_tiempo_por_cuenca: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/cuenca/series_de_tiempo/nivel_freatico", tags=["cuencas"])
+@app.get("/cuencas/cuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"])
 async def get_nivel_freatico_por_tiempo_por_cuenca(
     cuenca_identificador: str = Query(..., description="Código o nombre de la cuenca"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
@@ -1287,7 +1421,7 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
         logging.error(f"Error in get_nivel_freatico_por_tiempo_por_cuenca: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/subcuenca/series_de_tiempo/altura_linimetrica", tags=["cuencas"])
+@app.get("/cuencas/subcuenca/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"])
 async def get_altura_linimetrica_por_tiempo_por_subcuenca(
     cuenca_identificador: str = Query(..., description="Código o nombre de la subcuenca"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
@@ -1378,7 +1512,7 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
         logging.error(f"Error in get_altura_linimetrica_por_tiempo_por_subcuenca: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/subcuenca/series_de_tiempo/nivel_freatico", tags=["cuencas"])
+@app.get("/cuencas/subcuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"])
 async def get_nivel_freatico_por_tiempo_por_subcuenca(
     cuenca_identificador: str = Query(..., description="Código o nombre de la subcuenca"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
@@ -1469,7 +1603,7 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
         logging.error(f"Error in get_nivel_freatico_por_tiempo_por_subcuenca: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/subsubcuenca/series_de_tiempo/altura_linimetrica", tags=["cuencas"])
+@app.get("/cuencas/subsubcuenca/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"])
 async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
     cuenca_identificador: str = Query(..., description="Código o nombre de la subsubcuenca"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
@@ -1560,7 +1694,7 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
         logging.error(f"Error in get_altura_linimetrica_por_tiempo_por_subsubcuenca: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/subsubcuenca/series_de_tiempo/nivel_freatico", tags=["cuencas"])
+@app.get("/cuencas/subsubcuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"])
 async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
     cuenca_identificador: str = Query(..., description="Código o nombre de la subsubcuenca"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
@@ -1651,7 +1785,7 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
         logging.error(f"Error in get_nivel_freatico_por_tiempo_por_subsubcuenca: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.post("/puntos/estadisticas", tags=["puntos"])
+@app.post("/puntos/estadisticas", tags=["Puntos de Medición"])
 async def get_point_statistics(locations: List[UTMLocation]):
     """Obtiene estadísticas de caudal para uno o varios puntos UTM específicos"""
     try:
@@ -1784,7 +1918,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
         logging.error(f"Error in get_point_statistics: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/puntos/series_de_tiempo/caudal", tags=["puntos"])
+@app.get("/puntos/series_de_tiempo/caudal", tags=["Series Temporales"])
 async def get_caudal_por_tiempo_por_punto(
     utm_norte: int = Query(..., description="Coordenada UTM Norte del punto"),
     utm_este: int = Query(..., description="Coordenada UTM Este del punto"),
@@ -1828,7 +1962,7 @@ async def get_caudal_por_tiempo_por_punto(
         logging.error(f"Error in get_caudal_por_tiempo_por_punto: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/puntos/series_de_tiempo/altura_linimetrica", tags=["puntos"])
+@app.get("/puntos/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"])
 async def get_altura_linimetrica_por_tiempo_por_punto(
     utm_norte: int = Query(..., description="Coordenada UTM Norte del punto"),
     utm_este: int = Query(..., description="Coordenada UTM Este del punto"),
@@ -1896,7 +2030,7 @@ async def get_altura_linimetrica_por_tiempo_por_punto(
         logging.error(f"Error in get_altura_linimetrica_por_tiempo_por_punto: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/puntos/series_de_tiempo/nivel_freatico", tags=["puntos"])
+@app.get("/puntos/series_de_tiempo/nivel_freatico", tags=["Series Temporales"])
 async def get_nivel_freatico_por_tiempo_por_punto(
     utm_norte: int = Query(..., description="Coordenada UTM Norte del punto"),
     utm_este: int = Query(..., description="Coordenada UTM Este del punto"),
