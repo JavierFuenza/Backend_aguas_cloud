@@ -16,7 +16,13 @@ from asyncio_pool import AioPool
 import threading
 from queue import Queue, Empty
 
-load_dotenv()
+# Load .env only in development (Azure provides env vars automatically)
+# Azure sets WEBSITE_INSTANCE_ID when running in App Service/Functions
+if not os.getenv('WEBSITE_INSTANCE_ID'):
+    load_dotenv()
+    logging.info("Running in development mode - loaded .env file")
+else:
+    logging.info("Running in Azure - using Application Settings")
 
 # Global connection pool and cache
 connection_pool: Optional[Queue] = None
