@@ -83,7 +83,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.4.0",
+    version="1.5.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -826,19 +826,68 @@ async def get_atlas():
     description="Obtiene estadísticas de caudal mínimo y máximo agregadas globalmente, por cuenca y por subcuenca. Usado para configurar filtros reactivos en el frontend."
 )
 async def get_filtros_reactivos():
-    """Obtiene estadísticas de caudal para filtros reactivos - TODO: implement with pre-aggregated table"""
-    # TODO: Query from dw.Filtros_Reactivos_Stats table once created
-    return {
-        "estadisticas": {
-            "caudal_global": {
-                "avgMin": 0,
-                "avgMax": 0,
-                "total_puntos_unicos": 0
-            },
-            "caudal_por_cuenca": [],
-            "caudal_por_subcuenca": []
+    """Obtiene estadísticas de caudal para filtros reactivos desde tabla pre-agregada"""
+    try:
+        # Query the pre-aggregated table
+        stats_query = """
+        SELECT
+            nivel,
+            nom_cuenca,
+            nom_subcuenca,
+            avgMin,
+            avgMax,
+            total_puntos
+        FROM dw.Filtros_Reactivos_Stats
+        ORDER BY
+            CASE nivel
+                WHEN 'global' THEN 1
+                WHEN 'cuenca' THEN 2
+                WHEN 'subcuenca' THEN 3
+            END,
+            nom_cuenca,
+            nom_subcuenca
+        """
+        results = execute_query(stats_query)
+
+        # Separate results by nivel
+        global_stats = {}
+        cuenca_stats = []
+        subcuenca_stats = []
+
+        for r in results:
+            nivel = r.get('nivel')
+            if nivel == 'global':
+                global_stats = {
+                    "avgMin": safe_round(r.get('avgMin')),
+                    "avgMax": safe_round(r.get('avgMax')),
+                    "total_puntos_unicos": r.get('total_puntos', 0)
+                }
+            elif nivel == 'cuenca':
+                cuenca_stats.append({
+                    "nom_cuenca": r.get('nom_cuenca'),
+                    "avgMin": safe_round(r.get('avgMin')),
+                    "avgMax": safe_round(r.get('avgMax')),
+                    "total_puntos": r.get('total_puntos', 0)
+                })
+            elif nivel == 'subcuenca':
+                subcuenca_stats.append({
+                    "nom_cuenca": r.get('nom_cuenca'),
+                    "nom_subcuenca": r.get('nom_subcuenca'),
+                    "avgMin": safe_round(r.get('avgMin')),
+                    "avgMax": safe_round(r.get('avgMax')),
+                    "total_puntos": r.get('total_puntos', 0)
+                })
+
+        return {
+            "estadisticas": {
+                "caudal_global": global_stats,
+                "caudal_por_cuenca": cuenca_stats,
+                "caudal_por_subcuenca": subcuenca_stats
+            }
         }
-    }
+    except Exception as e:
+        logging.error(f"Error in get_filtros_reactivos: {e}")
+        raise HTTPException(status_code=500, detail={"error": str(e)})
 
 @app.get(
     "/cuencas/stats",
