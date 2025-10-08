@@ -1,1 +1,14 @@
+.git
+.github
+.vscode
 .venv
+venv
+__pycache__
+*.pyc
+*.pyo
+.env
+local.settings.json
+.python_packages
+.funcignore
+*.csv
+CLAUDE.md
