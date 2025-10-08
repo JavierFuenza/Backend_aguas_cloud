@@ -29,8 +29,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # Don't create venv or install dependencies - Azure will handle this
-      # Just upload the source code and requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
       - name: Upload artifact for deployment job
         uses: actions/upload-artifact@v4
@@ -45,6 +47,8 @@ jobs:
             !__pycache__
             !*.pyc
             !.env
+            !*.csv
+            !CLAUDE.md
 
   deploy:
     runs-on: ubuntu-latest
@@ -64,6 +68,4 @@ jobs:
           slot-name: 'Production'
           package: '.'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_644838FA50C04E128E7173E992D7A362 }}
-          scm-do-build-during-deployment: true
-          enable-oryx-build: true
         

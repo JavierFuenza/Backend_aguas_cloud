@@ -8,7 +8,6 @@ __pycache__
 *.pyo
 .env
 local.settings.json
-.python_packages
 .funcignore
 *.csv
 CLAUDE.md
