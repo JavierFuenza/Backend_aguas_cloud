@@ -1053,7 +1053,7 @@ async def get_cuencas_stats(
     "/cuencas/cuenca/series_de_tiempo/caudal",
     tags=["Series Temporales"],
     summary="Serie temporal de caudal por cuenca",
-    description="Obtiene la serie temporal de caudal para una cuenca específica (máximo 1000 registros más recientes). Acepta código numérico o nombre de cuenca. Opcionalmente filtra por rango de fechas (YYYY-MM-DD)."
+    description="Obtiene la serie temporal de caudal para una cuenca específica. Acepta código numérico o nombre de cuenca. Opcionalmente filtra por rango de fechas (YYYY-MM-DD)."
 )
 async def get_caudal_por_tiempo_por_cuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
@@ -1099,7 +1099,7 @@ async def get_caudal_por_tiempo_por_cuenca(
 
         # Query time series data (Note: adjust field name if different)
         time_series_query = f"""
-        SELECT TOP 1000
+        SELECT 
             Fecha_Medicion as fecha_medicion,
             Caudal as caudal
         FROM dw.FACT_Mediciones_Caudal
@@ -1178,7 +1178,7 @@ async def get_caudal_por_tiempo_por_subcuenca(
 
         # Query time series data
         time_series_query = f"""
-        SELECT TOP 1000
+        SELECT 
             Fecha_Medicion as fecha_medicion,
             Caudal as caudal
         FROM dw.FACT_Mediciones_Caudal
@@ -1257,7 +1257,7 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
 
         # Query time series data
         time_series_query = f"""
-        SELECT TOP 1000
+        SELECT
             Fecha_Medicion as fecha_medicion,
             Caudal as caudal
         FROM dw.FACT_Mediciones_Caudal
@@ -1980,7 +1980,7 @@ async def get_caudal_por_tiempo_por_punto(
     """Obtiene el caudal extraído a lo largo del tiempo para un punto UTM específico"""
     try:
         time_series_query = """
-        SELECT TOP 1000
+        SELECT
             '2023-01-01' as fecha_medicion,  -- Simulated date - replace with actual date field
             Caudal as caudal
         FROM dw.FACT_Mediciones_Caudal
