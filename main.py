@@ -201,7 +201,7 @@ class CuencaStatsResponse(BaseModel):
     caudal_promedio: Optional[float] = Field(None, description="Caudal promedio en l/s")
     caudal_minimo: Optional[float] = Field(None, description="Caudal mínimo registrado en l/s")
     caudal_maximo: Optional[float] = Field(None, description="Caudal máximo registrado en l/s")
-    caudal_desviacion_standar: Optional[float] = Field(None, description="Desviación estándar del caudal en l/s")
+    caudal_desviacion_estandar: Optional[float] = Field(None, description="Desviación estándar del caudal en l/s")
     total_puntos_unicos: int = Field(..., description="Número de puntos únicos de medición")
     total_mediciones: int = Field(..., description="Número total de mediciones")
 
@@ -218,7 +218,7 @@ class CuencaStatsResponse(BaseModel):
                 "caudal_promedio": 45.3,
                 "caudal_minimo": 5.2,
                 "caudal_maximo": 120.5,
-                "caudal_desviacion_standar": 22.8,
+                "caudal_desviacion_estandar": 22.8,
                 "total_puntos_unicos": 15,
                 "total_mediciones": 1850
             }
@@ -963,7 +963,7 @@ async def get_cuencas_stats(
                 AVG(caudal_promedio) as caudal_promedio,
                 MIN(caudal_minimo) as caudal_minimo,
                 MAX(caudal_maximo) as caudal_maximo,
-                AVG(caudal_desviacion_standar) as caudal_desviacion_standar,
+                AVG(caudal_desviacion_estandar) as caudal_desviacion_estandar,
                 SUM(total_puntos_unicos) as total_puntos_unicos,
                 SUM(total_mediciones) as total_mediciones
             FROM dw.Cuenca_Stats
@@ -984,7 +984,7 @@ async def get_cuencas_stats(
                 caudal_promedio,
                 caudal_minimo,
                 caudal_maximo,
-                caudal_desviacion_standar,
+                caudal_desviacion_estandar,
                 total_puntos_unicos,
                 total_mediciones
             FROM dw.Cuenca_Stats
@@ -1025,7 +1025,7 @@ async def get_cuencas_stats(
                 "caudal_promedio": safe_round(r.get('caudal_promedio')),
                 "caudal_minimo": safe_round(r.get('caudal_minimo')),
                 "caudal_maximo": safe_round(r.get('caudal_maximo')),
-                "caudal_desviacion_standar": safe_round(r.get('caudal_desviacion_standar')),
+                "caudal_desviacion_estandar": safe_round(r.get('caudal_desviacion_estandar')),
                 "total_puntos_unicos": r.get('total_puntos_unicos', 0),
                 "total_mediciones": r.get('total_mediciones', 0)
             }
