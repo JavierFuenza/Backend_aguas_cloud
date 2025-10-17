@@ -89,7 +89,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.6.2",
+    version="1.7.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -910,7 +910,7 @@ async def get_filtros_reactivos():
 )
 async def get_cuencas_stats(
     cod_cuenca: Optional[int] = Query(None, description="Código de cuenca", example=101),
-    cod_subcuenca: Optional[int] = Query(None, description="Código de subcuenca", example=10101),
+    cod_subcuenca: Optional[str] = Query(None, description="Código de subcuenca (número) o 'null' para filtrar donde subcuenca es NULL", example="10101"),
     cod_subsubcuenca: Optional[int] = Query(None, description="Código de subsubcuenca"),
     include_global: bool = Query(False, description="Incluir estadísticas globales del sistema completo")
 ):
@@ -923,9 +923,21 @@ async def get_cuencas_stats(
         if cod_cuenca is not None:
             filters.append("Cod_Cuenca = ?")
             params.append(cod_cuenca)
+
+        # Handle cod_subcuenca: can be a number, "null" string, or None
         if cod_subcuenca is not None:
-            filters.append("Cod_Subcuenca = ?")
-            params.append(cod_subcuenca)
+            if cod_subcuenca.lower() == "null":
+                # User explicitly wants to filter where subcuenca IS NULL
+                filters.append("Cod_Subcuenca IS NULL")
+            else:
+                # Try to parse as integer
+                try:
+                    subcuenca_int = int(cod_subcuenca)
+                    filters.append("Cod_Subcuenca = ?")
+                    params.append(subcuenca_int)
+                except ValueError:
+                    raise HTTPException(status_code=400, detail="cod_subcuenca debe ser un número o 'null'")
+
         if cod_subsubcuenca is not None:
             filters.append("Cod_Subsubcuenca = ?")
             params.append(cod_subsubcuenca)
@@ -933,70 +945,25 @@ async def get_cuencas_stats(
         # Build WHERE clause (if no filters, return all)
         where_clause = "WHERE " + " AND ".join(filters) if filters else ""
 
-        # Determine aggregation level
-        # If only cod_cuenca: aggregate all subcuencas
-        # If cod_cuenca + cod_subcuenca: aggregate all subsubcuencas
-        # Otherwise: return individual rows
-        if cod_cuenca is not None and cod_subcuenca is None and cod_subsubcuenca is None:
-            # Aggregate all subcuencas within the cuenca
-            stats_query = f"""
-            SELECT
-                Cod_Cuenca,
-                MIN(Nom_Cuenca) as Nom_Cuenca,
-                MIN(Cod_Region) as Cod_Region,
-                NULL as Cod_Subcuenca,
-                NULL as Nom_Subcuenca,
-                NULL as Cod_Subsubcuenca,
-                NULL as Nom_Subsubcuenca,
-                AVG(caudal_promedio) as caudal_promedio,
-                MIN(caudal_minimo) as caudal_minimo,
-                MAX(caudal_maximo) as caudal_maximo,
-                SUM(total_puntos_unicos) as total_puntos_unicos,
-                SUM(total_mediciones) as total_mediciones
-            FROM dw.Cuenca_Stats
-            {where_clause}
-            GROUP BY Cod_Cuenca
-            """
-        elif cod_cuenca is not None and cod_subcuenca is not None and cod_subsubcuenca is None:
-            # Aggregate all subsubcuencas within the subcuenca
-            stats_query = f"""
-            SELECT
-                Cod_Cuenca,
-                MIN(Nom_Cuenca) as Nom_Cuenca,
-                MIN(Cod_Region) as Cod_Region,
-                Cod_Subcuenca,
-                MIN(Nom_Subcuenca) as Nom_Subcuenca,
-                NULL as Cod_Subsubcuenca,
-                NULL as Nom_Subsubcuenca,
-                AVG(caudal_promedio) as caudal_promedio,
-                MIN(caudal_minimo) as caudal_minimo,
-                MAX(caudal_maximo) as caudal_maximo,
-                SUM(total_puntos_unicos) as total_puntos_unicos,
-                SUM(total_mediciones) as total_mediciones
-            FROM dw.Cuenca_Stats
-            {where_clause}
-            GROUP BY Cod_Cuenca, Cod_Subcuenca
-            """
-        else:
-            # Return individual rows (all filters or no filters)
-            stats_query = f"""
-            SELECT
-                Cod_Cuenca,
-                Nom_Cuenca,
-                Cod_Subcuenca,
-                Nom_Subcuenca,
-                Cod_Subsubcuenca,
-                Nom_Subsubcuenca,
-                Cod_Region,
-                caudal_promedio,
-                caudal_minimo,
-                caudal_maximo,
-                total_puntos_unicos,
-                total_mediciones
-            FROM dw.Cuenca_Stats
-            {where_clause}
-            ORDER BY Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca
-            """
+        # Always return individual rows without aggregation
+        stats_query = f"""
+        SELECT
+            Cod_Cuenca,
+            Nom_Cuenca,
+            Cod_Subcuenca,
+            Nom_Subcuenca,
+            Cod_Subsubcuenca,
+            Nom_Subsubcuenca,
+            Cod_Region,
+            caudal_promedio,
+            caudal_minimo,
+            caudal_maximo,
+            total_puntos_unicos,
+            total_mediciones
+        FROM dw.Cuenca_Stats
+        {where_clause}
+        ORDER BY Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca
+        """
 
         results = execute_query(stats_query, params)
 
