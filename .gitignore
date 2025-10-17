@@ -208,5 +208,5 @@ __marimo__/
 
 .env
 CLAUDE.md
-.csv
+*.csv
 .python_packages

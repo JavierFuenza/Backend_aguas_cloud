@@ -89,7 +89,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.6.1",
+    version="1.6.2",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -1064,52 +1064,33 @@ async def get_caudal_por_tiempo_por_cuenca(
     try:
         # Determine if identifier is numeric (code) or text (name)
         if cuenca_identificador.isdigit():
-            filter_condition = "Cod_Cuenca = ?"
+            filter_condition = "COD_CUENCA = ?"
             params = [int(cuenca_identificador)]
         else:
-            filter_condition = "Nom_Cuenca = ?"
+            filter_condition = "NOM_CUENCA = ?"
             params = [cuenca_identificador]
-
-        # Get UTM coordinates for this cuenca
-        utm_query = f"""
-        SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
-        WHERE {filter_condition}
-          AND UTM_Norte IS NOT NULL
-          AND UTM_Este IS NOT NULL
-        """
-
-        utm_results = execute_query(utm_query, params)
-
-        if not utm_results:
-            raise HTTPException(status_code=404, detail="No se encontró la cuenca especificada.")
-
-        # Build OR conditions for all UTM coordinates in this cuenca
-        utm_conditions = " OR ".join([
-            f"(UTM_Norte = {r['UTM_Norte']} AND UTM_Este = {r['UTM_Este']})"
-            for r in utm_results
-        ])
 
         # Build date filters
         date_filter = ""
         if fecha_inicio:
-            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+            date_filter += " AND FECHA_MEDICION >= ?"
+            params.append(fecha_inicio)
         if fecha_fin:
-            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+            date_filter += " AND FECHA_MEDICION <= ?"
+            params.append(fecha_fin)
 
-        # Query time series data (Note: adjust field name if different)
+        # Query Series_Tiempo table with pre-sorted index
         time_series_query = f"""
-        SELECT 
-            Fecha_Medicion as fecha_medicion,
-            Caudal as caudal
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Caudal IS NOT NULL
+        SELECT
+            FECHA_MEDICION as fecha_medicion,
+            CAUDAL as caudal
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND CAUDAL IS NOT NULL
           {date_filter}
-        ORDER BY Fecha_Medicion DESC
         """
 
-        results = execute_query(time_series_query)
+        results = execute_query(time_series_query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de caudal para el período o cuenca especificada.")
@@ -1143,52 +1124,33 @@ async def get_caudal_por_tiempo_por_subcuenca(
     try:
         # Determine if identifier is numeric (code) or text (name)
         if cuenca_identificador.isdigit():
-            filter_condition = "Cod_Subcuenca = ?"
+            filter_condition = "COD_SUBCUENCA = ?"
             params = [int(cuenca_identificador)]
         else:
-            filter_condition = "Nom_Subcuenca = ?"
+            filter_condition = "NOM_SUBCUENCA = ?"
             params = [cuenca_identificador]
-
-        # Get UTM coordinates for this subcuenca
-        utm_query = f"""
-        SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
-        WHERE {filter_condition}
-          AND UTM_Norte IS NOT NULL
-          AND UTM_Este IS NOT NULL
-        """
-
-        utm_results = execute_query(utm_query, params)
-
-        if not utm_results:
-            raise HTTPException(status_code=404, detail="No se encontró la subcuenca especificada.")
-
-        # Build OR conditions for all UTM coordinates in this subcuenca
-        utm_conditions = " OR ".join([
-            f"(UTM_Norte = {r['UTM_Norte']} AND UTM_Este = {r['UTM_Este']})"
-            for r in utm_results
-        ])
 
         # Build date filters
         date_filter = ""
         if fecha_inicio:
-            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+            date_filter += " AND FECHA_MEDICION >= ?"
+            params.append(fecha_inicio)
         if fecha_fin:
-            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+            date_filter += " AND FECHA_MEDICION <= ?"
+            params.append(fecha_fin)
 
-        # Query time series data
+        # Query Series_Tiempo table with pre-sorted index
         time_series_query = f"""
-        SELECT 
-            Fecha_Medicion as fecha_medicion,
-            Caudal as caudal
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Caudal IS NOT NULL
+        SELECT
+            FECHA_MEDICION as fecha_medicion,
+            CAUDAL as caudal
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND CAUDAL IS NOT NULL
           {date_filter}
-        ORDER BY Fecha_Medicion DESC
         """
 
-        results = execute_query(time_series_query)
+        results = execute_query(time_series_query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de caudal para el período o subcuenca especificada.")
@@ -1222,52 +1184,33 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
     try:
         # Determine if identifier is numeric (code) or text (name)
         if cuenca_identificador.isdigit():
-            filter_condition = "Cod_Subsubcuenca = ?"
+            filter_condition = "COD_SUBSUBCUENCA = ?"
             params = [int(cuenca_identificador)]
         else:
-            filter_condition = "Nom_Subsubcuenca = ?"
+            filter_condition = "NOM_SUBSUBCUENCA = ?"
             params = [cuenca_identificador]
-
-        # Get UTM coordinates for this subsubcuenca
-        utm_query = f"""
-        SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
-        WHERE {filter_condition}
-          AND UTM_Norte IS NOT NULL
-          AND UTM_Este IS NOT NULL
-        """
-
-        utm_results = execute_query(utm_query, params)
-
-        if not utm_results:
-            raise HTTPException(status_code=404, detail="No se encontró la subsubcuenca especificada.")
-
-        # Build OR conditions for all UTM coordinates in this subsubcuenca
-        utm_conditions = " OR ".join([
-            f"(UTM_Norte = {r['UTM_Norte']} AND UTM_Este = {r['UTM_Este']})"
-            for r in utm_results
-        ])
 
         # Build date filters
         date_filter = ""
         if fecha_inicio:
-            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+            date_filter += " AND FECHA_MEDICION >= ?"
+            params.append(fecha_inicio)
         if fecha_fin:
-            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+            date_filter += " AND FECHA_MEDICION <= ?"
+            params.append(fecha_fin)
 
-        # Query time series data
+        # Query Series_Tiempo table with pre-sorted index
         time_series_query = f"""
         SELECT
-            Fecha_Medicion as fecha_medicion,
-            Caudal as caudal
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Caudal IS NOT NULL
+            FECHA_MEDICION as fecha_medicion,
+            CAUDAL as caudal
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND CAUDAL IS NOT NULL
           {date_filter}
-        ORDER BY Fecha_Medicion DESC
         """
 
-        results = execute_query(time_series_query)
+        results = execute_query(time_series_query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de caudal para el período o subsubcuenca especificada.")
@@ -1301,63 +1244,44 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
     try:
         # Determine if identifier is numeric (code) or text (name)
         if cuenca_identificador.isdigit():
-            filter_condition = "Cod_Cuenca = ?"
+            filter_condition = "COD_CUENCA = ?"
             params = [int(cuenca_identificador)]
         else:
-            filter_condition = "Nom_Cuenca = ?"
+            filter_condition = "NOM_CUENCA = ?"
             params = [cuenca_identificador]
-
-        # Get UTM coordinates for this cuenca
-        utm_query = f"""
-        SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
-        WHERE {filter_condition}
-          AND UTM_Norte IS NOT NULL
-          AND UTM_Este IS NOT NULL
-        """
-
-        utm_results = execute_query(utm_query, params)
-
-        if not utm_results:
-            raise HTTPException(status_code=404, detail="No se encontró la cuenca especificada.")
-
-        # Build OR conditions for all UTM coordinates in this cuenca
-        utm_conditions = " OR ".join([
-            f"(UTM_Norte = {r['UTM_Norte']} AND UTM_Este = {r['UTM_Este']})"
-            for r in utm_results
-        ])
 
         # Build date filters
         date_filter = ""
         if fecha_inicio:
-            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+            date_filter += " AND FECHA_MEDICION >= ?"
+            params.append(fecha_inicio)
         if fecha_fin:
-            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+            date_filter += " AND FECHA_MEDICION <= ?"
+            params.append(fecha_fin)
 
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Altura_Limnimetrica IS NOT NULL
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND ALTURA_LIMNIMETRICA IS NOT NULL
           {date_filter}
         """
-        count_result = execute_query(count_query)
+        count_result = execute_query(count_query, params)
         total_count = count_result[0]['total'] if count_result else 0
 
-        # Query time series data
+        # Query Series_Tiempo table with pre-sorted index
         time_series_query = f"""
         SELECT
-            Fecha_Medicion as fecha_medicion,
-            Altura_Limnimetrica as altura_linimetrica
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Altura_Limnimetrica IS NOT NULL
+            FECHA_MEDICION as fecha_medicion,
+            ALTURA_LIMNIMETRICA as altura_linimetrica
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND ALTURA_LIMNIMETRICA IS NOT NULL
           {date_filter}
-        ORDER BY Fecha_Medicion DESC
         """
 
-        results = execute_query(time_series_query)
+        results = execute_query(time_series_query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de altura limnimétrica para el período o cuenca especificada.")
@@ -1392,63 +1316,44 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
     try:
         # Determine if identifier is numeric (code) or text (name)
         if cuenca_identificador.isdigit():
-            filter_condition = "Cod_Cuenca = ?"
+            filter_condition = "COD_CUENCA = ?"
             params = [int(cuenca_identificador)]
         else:
-            filter_condition = "Nom_Cuenca = ?"
+            filter_condition = "NOM_CUENCA = ?"
             params = [cuenca_identificador]
-
-        # Get UTM coordinates for this cuenca
-        utm_query = f"""
-        SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
-        WHERE {filter_condition}
-          AND UTM_Norte IS NOT NULL
-          AND UTM_Este IS NOT NULL
-        """
-
-        utm_results = execute_query(utm_query, params)
-
-        if not utm_results:
-            raise HTTPException(status_code=404, detail="No se encontró la cuenca especificada.")
-
-        # Build OR conditions for all UTM coordinates in this cuenca
-        utm_conditions = " OR ".join([
-            f"(UTM_Norte = {r['UTM_Norte']} AND UTM_Este = {r['UTM_Este']})"
-            for r in utm_results
-        ])
 
         # Build date filters
         date_filter = ""
         if fecha_inicio:
-            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+            date_filter += " AND FECHA_MEDICION >= ?"
+            params.append(fecha_inicio)
         if fecha_fin:
-            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+            date_filter += " AND FECHA_MEDICION <= ?"
+            params.append(fecha_fin)
 
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Nivel_Freatico IS NOT NULL
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND NIVEL_FREATICO IS NOT NULL
           {date_filter}
         """
-        count_result = execute_query(count_query)
+        count_result = execute_query(count_query, params)
         total_count = count_result[0]['total'] if count_result else 0
 
-        # Query time series data
+        # Query Series_Tiempo table with pre-sorted index
         time_series_query = f"""
         SELECT
-            Fecha_Medicion as fecha_medicion,
-            Nivel_Freatico as nivel_freatico
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Nivel_Freatico IS NOT NULL
+            FECHA_MEDICION as fecha_medicion,
+            NIVEL_FREATICO as nivel_freatico
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND NIVEL_FREATICO IS NOT NULL
           {date_filter}
-        ORDER BY Fecha_Medicion DESC
         """
 
-        results = execute_query(time_series_query)
+        results = execute_query(time_series_query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de nivel freático para el período o cuenca especificada.")
@@ -1483,63 +1388,44 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
     try:
         # Determine if identifier is numeric (code) or text (name)
         if cuenca_identificador.isdigit():
-            filter_condition = "Cod_Subcuenca = ?"
+            filter_condition = "COD_SUBCUENCA = ?"
             params = [int(cuenca_identificador)]
         else:
-            filter_condition = "Nom_Subcuenca = ?"
+            filter_condition = "NOM_SUBCUENCA = ?"
             params = [cuenca_identificador]
-
-        # Get UTM coordinates for this subcuenca
-        utm_query = f"""
-        SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
-        WHERE {filter_condition}
-          AND UTM_Norte IS NOT NULL
-          AND UTM_Este IS NOT NULL
-        """
-
-        utm_results = execute_query(utm_query, params)
-
-        if not utm_results:
-            raise HTTPException(status_code=404, detail="No se encontró la subcuenca especificada.")
-
-        # Build OR conditions for all UTM coordinates in this subcuenca
-        utm_conditions = " OR ".join([
-            f"(UTM_Norte = {r['UTM_Norte']} AND UTM_Este = {r['UTM_Este']})"
-            for r in utm_results
-        ])
 
         # Build date filters
         date_filter = ""
         if fecha_inicio:
-            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+            date_filter += " AND FECHA_MEDICION >= ?"
+            params.append(fecha_inicio)
         if fecha_fin:
-            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+            date_filter += " AND FECHA_MEDICION <= ?"
+            params.append(fecha_fin)
 
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Altura_Limnimetrica IS NOT NULL
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND ALTURA_LIMNIMETRICA IS NOT NULL
           {date_filter}
         """
-        count_result = execute_query(count_query)
+        count_result = execute_query(count_query, params)
         total_count = count_result[0]['total'] if count_result else 0
 
-        # Query time series data
+        # Query Series_Tiempo table with pre-sorted index
         time_series_query = f"""
         SELECT
-            Fecha_Medicion as fecha_medicion,
-            Altura_Limnimetrica as altura_linimetrica
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Altura_Limnimetrica IS NOT NULL
+            FECHA_MEDICION as fecha_medicion,
+            ALTURA_LIMNIMETRICA as altura_linimetrica
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND ALTURA_LIMNIMETRICA IS NOT NULL
           {date_filter}
-        ORDER BY Fecha_Medicion DESC
         """
 
-        results = execute_query(time_series_query)
+        results = execute_query(time_series_query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de altura limnimétrica para el período o subcuenca especificada.")
@@ -1574,63 +1460,44 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
     try:
         # Determine if identifier is numeric (code) or text (name)
         if cuenca_identificador.isdigit():
-            filter_condition = "Cod_Subcuenca = ?"
+            filter_condition = "COD_SUBCUENCA = ?"
             params = [int(cuenca_identificador)]
         else:
-            filter_condition = "Nom_Subcuenca = ?"
+            filter_condition = "NOM_SUBCUENCA = ?"
             params = [cuenca_identificador]
-
-        # Get UTM coordinates for this subcuenca
-        utm_query = f"""
-        SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
-        WHERE {filter_condition}
-          AND UTM_Norte IS NOT NULL
-          AND UTM_Este IS NOT NULL
-        """
-
-        utm_results = execute_query(utm_query, params)
-
-        if not utm_results:
-            raise HTTPException(status_code=404, detail="No se encontró la subcuenca especificada.")
-
-        # Build OR conditions for all UTM coordinates in this subcuenca
-        utm_conditions = " OR ".join([
-            f"(UTM_Norte = {r['UTM_Norte']} AND UTM_Este = {r['UTM_Este']})"
-            for r in utm_results
-        ])
 
         # Build date filters
         date_filter = ""
         if fecha_inicio:
-            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+            date_filter += " AND FECHA_MEDICION >= ?"
+            params.append(fecha_inicio)
         if fecha_fin:
-            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+            date_filter += " AND FECHA_MEDICION <= ?"
+            params.append(fecha_fin)
 
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Nivel_Freatico IS NOT NULL
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND NIVEL_FREATICO IS NOT NULL
           {date_filter}
         """
-        count_result = execute_query(count_query)
+        count_result = execute_query(count_query, params)
         total_count = count_result[0]['total'] if count_result else 0
 
-        # Query time series data
+        # Query Series_Tiempo table with pre-sorted index
         time_series_query = f"""
         SELECT
-            Fecha_Medicion as fecha_medicion,
-            Nivel_Freatico as nivel_freatico
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Nivel_Freatico IS NOT NULL
+            FECHA_MEDICION as fecha_medicion,
+            NIVEL_FREATICO as nivel_freatico
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND NIVEL_FREATICO IS NOT NULL
           {date_filter}
-        ORDER BY Fecha_Medicion DESC
         """
 
-        results = execute_query(time_series_query)
+        results = execute_query(time_series_query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de nivel freático para el período o subcuenca especificada.")
@@ -1665,63 +1532,44 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
     try:
         # Determine if identifier is numeric (code) or text (name)
         if cuenca_identificador.isdigit():
-            filter_condition = "Cod_Subsubcuenca = ?"
+            filter_condition = "COD_SUBSUBCUENCA = ?"
             params = [int(cuenca_identificador)]
         else:
-            filter_condition = "Nom_Subsubcuenca = ?"
+            filter_condition = "NOM_SUBSUBCUENCA = ?"
             params = [cuenca_identificador]
-
-        # Get UTM coordinates for this subsubcuenca
-        utm_query = f"""
-        SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
-        WHERE {filter_condition}
-          AND UTM_Norte IS NOT NULL
-          AND UTM_Este IS NOT NULL
-        """
-
-        utm_results = execute_query(utm_query, params)
-
-        if not utm_results:
-            raise HTTPException(status_code=404, detail="No se encontró la subsubcuenca especificada.")
-
-        # Build OR conditions for all UTM coordinates in this subsubcuenca
-        utm_conditions = " OR ".join([
-            f"(UTM_Norte = {r['UTM_Norte']} AND UTM_Este = {r['UTM_Este']})"
-            for r in utm_results
-        ])
 
         # Build date filters
         date_filter = ""
         if fecha_inicio:
-            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+            date_filter += " AND FECHA_MEDICION >= ?"
+            params.append(fecha_inicio)
         if fecha_fin:
-            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+            date_filter += " AND FECHA_MEDICION <= ?"
+            params.append(fecha_fin)
 
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Altura_Limnimetrica IS NOT NULL
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND ALTURA_LIMNIMETRICA IS NOT NULL
           {date_filter}
         """
-        count_result = execute_query(count_query)
+        count_result = execute_query(count_query, params)
         total_count = count_result[0]['total'] if count_result else 0
 
-        # Query time series data
+        # Query Series_Tiempo table with pre-sorted index
         time_series_query = f"""
         SELECT
-            Fecha_Medicion as fecha_medicion,
-            Altura_Limnimetrica as altura_linimetrica
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Altura_Limnimetrica IS NOT NULL
+            FECHA_MEDICION as fecha_medicion,
+            ALTURA_LIMNIMETRICA as altura_linimetrica
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND ALTURA_LIMNIMETRICA IS NOT NULL
           {date_filter}
-        ORDER BY Fecha_Medicion DESC
         """
 
-        results = execute_query(time_series_query)
+        results = execute_query(time_series_query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de altura limnimétrica para el período o subsubcuenca especificada.")
@@ -1756,63 +1604,44 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
     try:
         # Determine if identifier is numeric (code) or text (name)
         if cuenca_identificador.isdigit():
-            filter_condition = "Cod_Subsubcuenca = ?"
+            filter_condition = "COD_SUBSUBCUENCA = ?"
             params = [int(cuenca_identificador)]
         else:
-            filter_condition = "Nom_Subsubcuenca = ?"
+            filter_condition = "NOM_SUBSUBCUENCA = ?"
             params = [cuenca_identificador]
-
-        # Get UTM coordinates for this subsubcuenca
-        utm_query = f"""
-        SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
-        WHERE {filter_condition}
-          AND UTM_Norte IS NOT NULL
-          AND UTM_Este IS NOT NULL
-        """
-
-        utm_results = execute_query(utm_query, params)
-
-        if not utm_results:
-            raise HTTPException(status_code=404, detail="No se encontró la subsubcuenca especificada.")
-
-        # Build OR conditions for all UTM coordinates in this subsubcuenca
-        utm_conditions = " OR ".join([
-            f"(UTM_Norte = {r['UTM_Norte']} AND UTM_Este = {r['UTM_Este']})"
-            for r in utm_results
-        ])
 
         # Build date filters
         date_filter = ""
         if fecha_inicio:
-            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
+            date_filter += " AND FECHA_MEDICION >= ?"
+            params.append(fecha_inicio)
         if fecha_fin:
-            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
+            date_filter += " AND FECHA_MEDICION <= ?"
+            params.append(fecha_fin)
 
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Nivel_Freatico IS NOT NULL
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND NIVEL_FREATICO IS NOT NULL
           {date_filter}
         """
-        count_result = execute_query(count_query)
+        count_result = execute_query(count_query, params)
         total_count = count_result[0]['total'] if count_result else 0
 
-        # Query time series data
+        # Query Series_Tiempo table with pre-sorted index
         time_series_query = f"""
         SELECT
-            Fecha_Medicion as fecha_medicion,
-            Nivel_Freatico as nivel_freatico
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE ({utm_conditions})
-          AND Nivel_Freatico IS NOT NULL
+            FECHA_MEDICION as fecha_medicion,
+            NIVEL_FREATICO as nivel_freatico
+        FROM dw.Series_Tiempo
+        WHERE {filter_condition}
+          AND NIVEL_FREATICO IS NOT NULL
           {date_filter}
-        ORDER BY Fecha_Medicion DESC
         """
 
-        results = execute_query(time_series_query)
+        results = execute_query(time_series_query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de nivel freático para el período o subsubcuenca especificada.")
