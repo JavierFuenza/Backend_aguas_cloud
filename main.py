@@ -89,7 +89,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.7.0",
+    version="1.7.1",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -201,6 +201,7 @@ class CuencaStatsResponse(BaseModel):
     caudal_promedio: Optional[float] = Field(None, description="Caudal promedio en l/s")
     caudal_minimo: Optional[float] = Field(None, description="Caudal mínimo registrado en l/s")
     caudal_maximo: Optional[float] = Field(None, description="Caudal máximo registrado en l/s")
+    caudal_desviacion_standar: Optional[float] = Field(None, description="Desviación estándar del caudal en l/s")
     total_puntos_unicos: int = Field(..., description="Número de puntos únicos de medición")
     total_mediciones: int = Field(..., description="Número total de mediciones")
 
@@ -217,6 +218,7 @@ class CuencaStatsResponse(BaseModel):
                 "caudal_promedio": 45.3,
                 "caudal_minimo": 5.2,
                 "caudal_maximo": 120.5,
+                "caudal_desviacion_standar": 22.8,
                 "total_puntos_unicos": 15,
                 "total_mediciones": 1850
             }
@@ -945,25 +947,50 @@ async def get_cuencas_stats(
         # Build WHERE clause (if no filters, return all)
         where_clause = "WHERE " + " AND ".join(filters) if filters else ""
 
-        # Always return individual rows without aggregation
-        stats_query = f"""
-        SELECT
-            Cod_Cuenca,
-            Nom_Cuenca,
-            Cod_Subcuenca,
-            Nom_Subcuenca,
-            Cod_Subsubcuenca,
-            Nom_Subsubcuenca,
-            Cod_Region,
-            caudal_promedio,
-            caudal_minimo,
-            caudal_maximo,
-            total_puntos_unicos,
-            total_mediciones
-        FROM dw.Cuenca_Stats
-        {where_clause}
-        ORDER BY Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca
-        """
+        # Determine if we should aggregate or return individual rows
+        # Aggregate when: only cod_cuenca is provided (no cod_subcuenca and no cod_subsubcuenca)
+        if cod_cuenca is not None and cod_subcuenca is None and cod_subsubcuenca is None:
+            # Aggregate all subcuencas within the cuenca into one result
+            stats_query = f"""
+            SELECT
+                Cod_Cuenca,
+                MIN(Nom_Cuenca) as Nom_Cuenca,
+                MIN(Cod_Region) as Cod_Region,
+                NULL as Cod_Subcuenca,
+                'Todas las subcuencas' as Nom_Subcuenca,
+                NULL as Cod_Subsubcuenca,
+                NULL as Nom_Subsubcuenca,
+                AVG(caudal_promedio) as caudal_promedio,
+                MIN(caudal_minimo) as caudal_minimo,
+                MAX(caudal_maximo) as caudal_maximo,
+                AVG(caudal_desviacion_standar) as caudal_desviacion_standar,
+                SUM(total_puntos_unicos) as total_puntos_unicos,
+                SUM(total_mediciones) as total_mediciones
+            FROM dw.Cuenca_Stats
+            {where_clause}
+            GROUP BY Cod_Cuenca
+            """
+        else:
+            # Return individual rows without aggregation
+            stats_query = f"""
+            SELECT
+                Cod_Cuenca,
+                Nom_Cuenca,
+                Cod_Subcuenca,
+                Nom_Subcuenca,
+                Cod_Subsubcuenca,
+                Nom_Subsubcuenca,
+                Cod_Region,
+                caudal_promedio,
+                caudal_minimo,
+                caudal_maximo,
+                caudal_desviacion_standar,
+                total_puntos_unicos,
+                total_mediciones
+            FROM dw.Cuenca_Stats
+            {where_clause}
+            ORDER BY Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca
+            """
 
         results = execute_query(stats_query, params)
 
@@ -998,6 +1025,7 @@ async def get_cuencas_stats(
                 "caudal_promedio": safe_round(r.get('caudal_promedio')),
                 "caudal_minimo": safe_round(r.get('caudal_minimo')),
                 "caudal_maximo": safe_round(r.get('caudal_maximo')),
+                "caudal_desviacion_standar": safe_round(r.get('caudal_desviacion_standar')),
                 "total_puntos_unicos": r.get('total_puntos_unicos', 0),
                 "total_mediciones": r.get('total_mediciones', 0)
             }
