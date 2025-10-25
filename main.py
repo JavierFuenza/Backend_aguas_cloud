@@ -89,7 +89,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.7.3",
+    version="1.7.4",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -1875,25 +1875,36 @@ async def get_caudal_por_tiempo_por_punto(
 ):
     """Obtiene el caudal extraído a lo largo del tiempo para un punto UTM específico"""
     try:
-        time_series_query = """
+        # Build date filters
+        params = [utm_norte, utm_este]
+        date_filter = ""
+        if fecha_inicio:
+            date_filter += " AND Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            date_filter += " AND Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+
+        time_series_query = f"""
         SELECT
-            '2023-01-01' as fecha_medicion,  -- Simulated date - replace with actual date field
+            Fecha_Medicion as fecha_medicion,
             Caudal as caudal
         FROM dw.FACT_Mediciones_Caudal
         WHERE UTM_Norte = ?
-        AND UTM_Este = ?
-        AND Caudal IS NOT NULL
-        ORDER BY Caudal DESC
+          AND UTM_Este = ?
+          AND Caudal IS NOT NULL
+          {date_filter}
+        ORDER BY Fecha_Medicion
         """
 
-        results = execute_query(time_series_query, [utm_norte, utm_este])
+        results = execute_query(time_series_query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de caudal para el punto UTM o período especificado.")
 
         caudal_por_tiempo = [
             {
-                "fecha_medicion": r.get('fecha_medicion'),
+                "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
                 "caudal": r.get('caudal')
             } for r in results
         ]
@@ -1901,6 +1912,7 @@ async def get_caudal_por_tiempo_por_punto(
         return {
             "utm_norte": utm_norte,
             "utm_este": utm_este,
+            "total_registros": len(caudal_por_tiempo),
             "caudal_por_tiempo": caudal_por_tiempo
         }
 
