@@ -1102,19 +1102,33 @@ async def get_caudal_por_tiempo_por_cuenca(
 
 @app.get("/cuencas/subcuenca/series_de_tiempo/caudal", tags=["Series Temporales"])
 async def get_caudal_por_tiempo_por_subcuenca(
-    cuenca_identificador: str = Query(..., description="Código o nombre de la subcuenca"),
+    cuenca_identificador: str = Query(..., description="Código o nombre de la cuenca"),
+    subcuenca_identificador: str = Query(..., description="Código, nombre de la subcuenca, o 'null' para subcuencas sin código"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
     fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
 ):
-    """Obtiene el caudal extraído a lo largo del tiempo para una subcuenca específica"""
+    """Obtiene el caudal extraído a lo largo del tiempo para una subcuenca específica dentro de una cuenca"""
     try:
-        # Determine if identifier is numeric (code) or text (name)
+        # Build cuenca filter
+        params = []
         if cuenca_identificador.isdigit():
-            filter_condition = "COD_SUBCUENCA = ?"
-            params = [int(cuenca_identificador)]
+            cuenca_filter = "COD_CUENCA = ?"
+            params.append(int(cuenca_identificador))
         else:
-            filter_condition = "NOM_SUBCUENCA = ?"
-            params = [cuenca_identificador]
+            cuenca_filter = "NOM_CUENCA = ?"
+            params.append(cuenca_identificador)
+
+        # Build subcuenca filter
+        if subcuenca_identificador.lower() == "null":
+            subcuenca_filter = "COD_SUBCUENCA IS NULL"
+        elif subcuenca_identificador.isdigit():
+            subcuenca_filter = "COD_SUBCUENCA = ?"
+            params.append(int(subcuenca_identificador))
+        else:
+            subcuenca_filter = "NOM_SUBCUENCA = ?"
+            params.append(subcuenca_identificador)
+
+        filter_condition = f"{cuenca_filter} AND {subcuenca_filter}"
 
         # Build date filters
         date_filter = ""
@@ -1151,7 +1165,8 @@ async def get_caudal_por_tiempo_por_subcuenca(
         ]
 
         return {
-            "subcuenca_identificador": cuenca_identificador,
+            "cuenca_identificador": cuenca_identificador,
+            "subcuenca_identificador": subcuenca_identificador,
             "total_registros": len(caudal_por_tiempo),
             "caudal_por_tiempo": caudal_por_tiempo
         }
@@ -1164,19 +1179,44 @@ async def get_caudal_por_tiempo_por_subcuenca(
 
 @app.get("/cuencas/subsubcuenca/series_de_tiempo/caudal", tags=["Series Temporales"])
 async def get_caudal_por_tiempo_por_subsubcuenca(
-    cuenca_identificador: str = Query(..., description="Código o nombre de la subsubcuenca"),
+    cuenca_identificador: str = Query(..., description="Código o nombre de la cuenca"),
+    subcuenca_identificador: str = Query(..., description="Código, nombre de la subcuenca, o 'null' para subcuencas sin código"),
+    subsubcuenca_identificador: str = Query(..., description="Código, nombre de la subsubcuenca, o 'null' para subsubcuencas sin código"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
     fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
 ):
-    """Obtiene el caudal extraído a lo largo del tiempo para una subsubcuenca específica"""
+    """Obtiene el caudal extraído a lo largo del tiempo para una subsubcuenca específica dentro de una subcuenca y cuenca"""
     try:
-        # Determine if identifier is numeric (code) or text (name)
+        # Build cuenca filter
+        params = []
         if cuenca_identificador.isdigit():
-            filter_condition = "COD_SUBSUBCUENCA = ?"
-            params = [int(cuenca_identificador)]
+            cuenca_filter = "COD_CUENCA = ?"
+            params.append(int(cuenca_identificador))
         else:
-            filter_condition = "NOM_SUBSUBCUENCA = ?"
-            params = [cuenca_identificador]
+            cuenca_filter = "NOM_CUENCA = ?"
+            params.append(cuenca_identificador)
+
+        # Build subcuenca filter
+        if subcuenca_identificador.lower() == "null":
+            subcuenca_filter = "COD_SUBCUENCA IS NULL"
+        elif subcuenca_identificador.isdigit():
+            subcuenca_filter = "COD_SUBCUENCA = ?"
+            params.append(int(subcuenca_identificador))
+        else:
+            subcuenca_filter = "NOM_SUBCUENCA = ?"
+            params.append(subcuenca_identificador)
+
+        # Build subsubcuenca filter
+        if subsubcuenca_identificador.lower() == "null":
+            subsubcuenca_filter = "COD_SUBSUBCUENCA IS NULL"
+        elif subsubcuenca_identificador.isdigit():
+            subsubcuenca_filter = "COD_SUBSUBCUENCA = ?"
+            params.append(int(subsubcuenca_identificador))
+        else:
+            subsubcuenca_filter = "NOM_SUBSUBCUENCA = ?"
+            params.append(subsubcuenca_identificador)
+
+        filter_condition = f"{cuenca_filter} AND {subcuenca_filter} AND {subsubcuenca_filter}"
 
         # Build date filters
         date_filter = ""
@@ -1213,7 +1253,9 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
         ]
 
         return {
-            "subsubcuenca_identificador": cuenca_identificador,
+            "cuenca_identificador": cuenca_identificador,
+            "subcuenca_identificador": subcuenca_identificador,
+            "subsubcuenca_identificador": subsubcuenca_identificador,
             "total_registros": len(caudal_por_tiempo),
             "caudal_por_tiempo": caudal_por_tiempo
         }
@@ -1350,19 +1392,33 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
 
 @app.get("/cuencas/subcuenca/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"])
 async def get_altura_linimetrica_por_tiempo_por_subcuenca(
-    cuenca_identificador: str = Query(..., description="Código o nombre de la subcuenca"),
+    cuenca_identificador: str = Query(..., description="Código o nombre de la cuenca"),
+    subcuenca_identificador: str = Query(..., description="Código, nombre de la subcuenca, o 'null' para subcuencas sin código"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
     fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
 ):
-    """Obtiene la altura limnimétrica a lo largo del tiempo para una subcuenca específica"""
+    """Obtiene la altura limnimétrica a lo largo del tiempo para una subcuenca específica dentro de una cuenca"""
     try:
-        # Determine if identifier is numeric (code) or text (name)
+        # Build cuenca filter
+        params = []
         if cuenca_identificador.isdigit():
-            filter_condition = "COD_SUBCUENCA = ?"
-            params = [int(cuenca_identificador)]
+            cuenca_filter = "COD_CUENCA = ?"
+            params.append(int(cuenca_identificador))
         else:
-            filter_condition = "NOM_SUBCUENCA = ?"
-            params = [cuenca_identificador]
+            cuenca_filter = "NOM_CUENCA = ?"
+            params.append(cuenca_identificador)
+
+        # Build subcuenca filter
+        if subcuenca_identificador.lower() == "null":
+            subcuenca_filter = "COD_SUBCUENCA IS NULL"
+        elif subcuenca_identificador.isdigit():
+            subcuenca_filter = "COD_SUBCUENCA = ?"
+            params.append(int(subcuenca_identificador))
+        else:
+            subcuenca_filter = "NOM_SUBCUENCA = ?"
+            params.append(subcuenca_identificador)
+
+        filter_condition = f"{cuenca_filter} AND {subcuenca_filter}"
 
         # Build date filters
         date_filter = ""
@@ -1399,7 +1455,8 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
         ]
 
         return {
-            "subcuenca_identificador": cuenca_identificador,
+            "cuenca_identificador": cuenca_identificador,
+            "subcuenca_identificador": subcuenca_identificador,
             "total_registros": len(altura_por_tiempo),
             "altura_por_tiempo": altura_por_tiempo
         }
@@ -1412,19 +1469,33 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
 
 @app.get("/cuencas/subcuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"])
 async def get_nivel_freatico_por_tiempo_por_subcuenca(
-    cuenca_identificador: str = Query(..., description="Código o nombre de la subcuenca"),
+    cuenca_identificador: str = Query(..., description="Código o nombre de la cuenca"),
+    subcuenca_identificador: str = Query(..., description="Código, nombre de la subcuenca, o 'null' para subcuencas sin código"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
     fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
 ):
-    """Obtiene el nivel freático a lo largo del tiempo para una subcuenca específica"""
+    """Obtiene el nivel freático a lo largo del tiempo para una subcuenca específica dentro de una cuenca"""
     try:
-        # Determine if identifier is numeric (code) or text (name)
+        # Build cuenca filter
+        params = []
         if cuenca_identificador.isdigit():
-            filter_condition = "COD_SUBCUENCA = ?"
-            params = [int(cuenca_identificador)]
+            cuenca_filter = "COD_CUENCA = ?"
+            params.append(int(cuenca_identificador))
         else:
-            filter_condition = "NOM_SUBCUENCA = ?"
-            params = [cuenca_identificador]
+            cuenca_filter = "NOM_CUENCA = ?"
+            params.append(cuenca_identificador)
+
+        # Build subcuenca filter
+        if subcuenca_identificador.lower() == "null":
+            subcuenca_filter = "COD_SUBCUENCA IS NULL"
+        elif subcuenca_identificador.isdigit():
+            subcuenca_filter = "COD_SUBCUENCA = ?"
+            params.append(int(subcuenca_identificador))
+        else:
+            subcuenca_filter = "NOM_SUBCUENCA = ?"
+            params.append(subcuenca_identificador)
+
+        filter_condition = f"{cuenca_filter} AND {subcuenca_filter}"
 
         # Build date filters
         date_filter = ""
@@ -1461,7 +1532,8 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
         ]
 
         return {
-            "subcuenca_identificador": cuenca_identificador,
+            "cuenca_identificador": cuenca_identificador,
+            "subcuenca_identificador": subcuenca_identificador,
             "total_registros": len(nivel_por_tiempo),
             "nivel_por_tiempo": nivel_por_tiempo
         }
@@ -1474,19 +1546,44 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
 
 @app.get("/cuencas/subsubcuenca/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"])
 async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
-    cuenca_identificador: str = Query(..., description="Código o nombre de la subsubcuenca"),
+    cuenca_identificador: str = Query(..., description="Código o nombre de la cuenca"),
+    subcuenca_identificador: str = Query(..., description="Código, nombre de la subcuenca, o 'null' para subcuencas sin código"),
+    subsubcuenca_identificador: str = Query(..., description="Código, nombre de la subsubcuenca, o 'null' para subsubcuencas sin código"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
     fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
 ):
-    """Obtiene la altura limnimétrica a lo largo del tiempo para una subsubcuenca específica"""
+    """Obtiene la altura limnimétrica a lo largo del tiempo para una subsubcuenca específica dentro de una subcuenca y cuenca"""
     try:
-        # Determine if identifier is numeric (code) or text (name)
+        # Build cuenca filter
+        params = []
         if cuenca_identificador.isdigit():
-            filter_condition = "COD_SUBSUBCUENCA = ?"
-            params = [int(cuenca_identificador)]
+            cuenca_filter = "COD_CUENCA = ?"
+            params.append(int(cuenca_identificador))
         else:
-            filter_condition = "NOM_SUBSUBCUENCA = ?"
-            params = [cuenca_identificador]
+            cuenca_filter = "NOM_CUENCA = ?"
+            params.append(cuenca_identificador)
+
+        # Build subcuenca filter
+        if subcuenca_identificador.lower() == "null":
+            subcuenca_filter = "COD_SUBCUENCA IS NULL"
+        elif subcuenca_identificador.isdigit():
+            subcuenca_filter = "COD_SUBCUENCA = ?"
+            params.append(int(subcuenca_identificador))
+        else:
+            subcuenca_filter = "NOM_SUBCUENCA = ?"
+            params.append(subcuenca_identificador)
+
+        # Build subsubcuenca filter
+        if subsubcuenca_identificador.lower() == "null":
+            subsubcuenca_filter = "COD_SUBSUBCUENCA IS NULL"
+        elif subsubcuenca_identificador.isdigit():
+            subsubcuenca_filter = "COD_SUBSUBCUENCA = ?"
+            params.append(int(subsubcuenca_identificador))
+        else:
+            subsubcuenca_filter = "NOM_SUBSUBCUENCA = ?"
+            params.append(subsubcuenca_identificador)
+
+        filter_condition = f"{cuenca_filter} AND {subcuenca_filter} AND {subsubcuenca_filter}"
 
         # Build date filters
         date_filter = ""
@@ -1523,7 +1620,9 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
         ]
 
         return {
-            "subsubcuenca_identificador": cuenca_identificador,
+            "cuenca_identificador": cuenca_identificador,
+            "subcuenca_identificador": subcuenca_identificador,
+            "subsubcuenca_identificador": subsubcuenca_identificador,
             "total_registros": len(altura_por_tiempo),
             "altura_por_tiempo": altura_por_tiempo
         }
@@ -1536,19 +1635,44 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
 
 @app.get("/cuencas/subsubcuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"])
 async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
-    cuenca_identificador: str = Query(..., description="Código o nombre de la subsubcuenca"),
+    cuenca_identificador: str = Query(..., description="Código o nombre de la cuenca"),
+    subcuenca_identificador: str = Query(..., description="Código, nombre de la subcuenca, o 'null' para subcuencas sin código"),
+    subsubcuenca_identificador: str = Query(..., description="Código, nombre de la subsubcuenca, o 'null' para subsubcuencas sin código"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
     fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
 ):
-    """Obtiene el nivel freático a lo largo del tiempo para una subsubcuenca específica"""
+    """Obtiene el nivel freático a lo largo del tiempo para una subsubcuenca específica dentro de una subcuenca y cuenca"""
     try:
-        # Determine if identifier is numeric (code) or text (name)
+        # Build cuenca filter
+        params = []
         if cuenca_identificador.isdigit():
-            filter_condition = "COD_SUBSUBCUENCA = ?"
-            params = [int(cuenca_identificador)]
+            cuenca_filter = "COD_CUENCA = ?"
+            params.append(int(cuenca_identificador))
         else:
-            filter_condition = "NOM_SUBSUBCUENCA = ?"
-            params = [cuenca_identificador]
+            cuenca_filter = "NOM_CUENCA = ?"
+            params.append(cuenca_identificador)
+
+        # Build subcuenca filter
+        if subcuenca_identificador.lower() == "null":
+            subcuenca_filter = "COD_SUBCUENCA IS NULL"
+        elif subcuenca_identificador.isdigit():
+            subcuenca_filter = "COD_SUBCUENCA = ?"
+            params.append(int(subcuenca_identificador))
+        else:
+            subcuenca_filter = "NOM_SUBCUENCA = ?"
+            params.append(subcuenca_identificador)
+
+        # Build subsubcuenca filter
+        if subsubcuenca_identificador.lower() == "null":
+            subsubcuenca_filter = "COD_SUBSUBCUENCA IS NULL"
+        elif subsubcuenca_identificador.isdigit():
+            subsubcuenca_filter = "COD_SUBSUBCUENCA = ?"
+            params.append(int(subsubcuenca_identificador))
+        else:
+            subsubcuenca_filter = "NOM_SUBSUBCUENCA = ?"
+            params.append(subsubcuenca_identificador)
+
+        filter_condition = f"{cuenca_filter} AND {subcuenca_filter} AND {subsubcuenca_filter}"
 
         # Build date filters
         date_filter = ""
@@ -1585,7 +1709,9 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
         ]
 
         return {
-            "subsubcuenca_identificador": cuenca_identificador,
+            "cuenca_identificador": cuenca_identificador,
+            "subcuenca_identificador": subcuenca_identificador,
+            "subsubcuenca_identificador": subsubcuenca_identificador,
             "total_registros": len(nivel_por_tiempo),
             "nivel_por_tiempo": nivel_por_tiempo
         }
