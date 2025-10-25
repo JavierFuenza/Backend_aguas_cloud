@@ -472,7 +472,8 @@ async def get_puntos_count(
     cod_subcuenca: Optional[int] = Query(None),
     filtro_null_subcuenca: Optional[bool] = Query(None, description="Si es True, filtra por subcuenca nula"),
     caudal_minimo: Optional[float] = Query(None),
-    caudal_maximo: Optional[float] = Query(None)
+    caudal_maximo: Optional[float] = Query(None),
+    pozo: Optional[bool] = Query(None, description="True para pozo subterráneo, False para punto superficial")
 ):
     """Obtiene el número de puntos únicos desde Puntos_Mapa con filtros"""
     try:
@@ -509,6 +510,10 @@ async def get_puntos_count(
             count_query += " AND caudal_promedio <= ?"
             query_params.append(caudal_maximo)
 
+        if pozo is not None:
+            count_query += " AND es_pozo_subterraneo = ?"
+            query_params.append(pozo)
+
         logging.info(f"Ejecutando query count: {count_query}")
         results = execute_query(count_query, query_params)
 
@@ -522,7 +527,8 @@ async def get_puntos_count(
                 "cod_subcuenca": cod_subcuenca,
                 "filtro_null_subcuenca": filtro_null_subcuenca,
                 "caudal_minimo": caudal_minimo,
-                "caudal_maximo": caudal_maximo
+                "caudal_maximo": caudal_maximo,
+                "pozo": pozo
             }
         }
 
@@ -609,6 +615,7 @@ async def get_puntos(
     filtro_null_subcuenca: Optional[bool] = Query(None, description="Si es True, filtra por subcuenca nula. Ignora 'cod_subcuenca' si es True."),
     caudal_minimo: Optional[float] = Query(None, description="Caudal promedio mínimo (l/s)"),
     caudal_maximo: Optional[float] = Query(None, description="Caudal promedio máximo (l/s)"),
+    pozo: Optional[bool] = Query(None, description="True para pozo subterráneo, False para punto superficial"),
     limit: Optional[int] = Query(120, description="Número máximo de puntos a retornar")
 ):
     """Obtiene puntos desde la tabla pre-agregada Puntos_Mapa con filtros"""
@@ -653,6 +660,10 @@ async def get_puntos(
         if caudal_maximo is not None:
             puntos_query += " AND caudal_promedio <= ?"
             query_params.append(caudal_maximo)
+
+        if pozo is not None:
+            puntos_query += " AND es_pozo_subterraneo = ?"
+            query_params.append(pozo)
 
         logging.info(f"Ejecutando query desde Puntos_Mapa: {puntos_query}")
         puntos = execute_query(puntos_query, query_params)
