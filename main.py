@@ -89,7 +89,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.7.1",
+    version="1.7.2",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -150,6 +150,9 @@ class PuntoInfoResponse(BaseModel):
     nombre_cuenca: Optional[str] = None
     nombre_subcuenca: Optional[str] = None
     caudal_promedio: Optional[float] = Field(None, description="Caudal promedio en l/s")
+    caudal_minimo: Optional[float] = Field(None, description="Caudal mínimo en l/s")
+    caudal_maximo: Optional[float] = Field(None, description="Caudal máximo en l/s")
+    caudal_desviacion_estandar: Optional[float] = Field(None, description="Desviación estándar del caudal en l/s")
     n_mediciones: int = Field(..., description="Número de mediciones registradas")
 
     class Config:
@@ -164,6 +167,9 @@ class PuntoInfoResponse(BaseModel):
                 "nombre_cuenca": "Río Lluta",
                 "nombre_subcuenca": "Río Lluta Alto",
                 "caudal_promedio": 25.5,
+                "caudal_minimo": 5.2,
+                "caudal_maximo": 85.3,
+                "caudal_desviacion_estandar": 18.7,
                 "n_mediciones": 120
             }
         }
@@ -686,13 +692,22 @@ async def get_punto_info(
     try:
         logging.info(f"Obteniendo info detallada para punto: UTM_Norte={utm_norte}, UTM_Este={utm_este}")
 
-        # Get basic geographic info for the point from Puntos_Mapa
+        # Get all info from Puntos_Mapa (includes pre-calculated statistics)
         punto_query = """
         SELECT
             UTM_Norte,
             UTM_Este,
             Huso,
-            es_pozo_subterraneo
+            es_pozo_subterraneo,
+            Cod_Cuenca,
+            Nom_Cuenca,
+            Cod_Subcuenca,
+            Nom_Subcuenca,
+            caudal_promedio,
+            caudal_minimo,
+            caudal_maximo,
+            caudal_desviacion_estandar,
+            n_mediciones
         FROM dw.Puntos_Mapa
         WHERE UTM_Norte = ?
           AND UTM_Este = ?
@@ -705,47 +720,21 @@ async def get_punto_info(
 
         punto = punto_result[0]
 
-        # Get cuenca info based on UTM coordinates
-        cuenca_query = """
-        SELECT TOP 1
-            Cod_Cuenca,
-            Nom_Cuenca,
-            Cod_Subcuenca,
-            Nom_Subcuenca
-        FROM dw.DIM_Cuenca
-        WHERE UTM_Norte = ?
-          AND UTM_Este = ?
-        """
-        cuenca_result = execute_query(cuenca_query, [utm_norte, utm_este])
-        cuenca = cuenca_result[0] if cuenca_result else {}
-
-        # Get caudal statistics for this specific point
-        caudal_query = """
-        SELECT
-            AVG(CAST(Caudal AS FLOAT)) as caudal_promedio,
-            MIN(CAST(Caudal AS FLOAT)) as caudal_minimo,
-            MAX(CAST(Caudal AS FLOAT)) as caudal_maximo,
-            COUNT(*) as n_mediciones
-        FROM dw.FACT_Mediciones_Caudal
-        WHERE UTM_Norte = ?
-          AND UTM_Este = ?
-          AND Caudal IS NOT NULL
-        """
-        caudal_result = execute_query(caudal_query, [utm_norte, utm_este])
-        caudal_stats = caudal_result[0] if caudal_result else {}
-
-        # Build detailed response
+        # Build detailed response using pre-calculated data
         response = {
             "utm_norte": utm_norte,
             "utm_este": utm_este,
             "huso": punto.get('Huso'),
             "es_pozo_subterraneo": bool(punto.get('es_pozo_subterraneo', 0)),
-            "cod_cuenca": cuenca.get('Cod_Cuenca'),
-            "cod_subcuenca": cuenca.get('Cod_Subcuenca'),
-            "nombre_cuenca": cuenca.get('Nom_Cuenca'),
-            "nombre_subcuenca": cuenca.get('Nom_Subcuenca'),
-            "caudal_promedio": safe_round(caudal_stats.get('caudal_promedio')),
-            "n_mediciones": caudal_stats.get('n_mediciones', 0)
+            "cod_cuenca": punto.get('Cod_Cuenca'),
+            "cod_subcuenca": punto.get('Cod_Subcuenca'),
+            "nombre_cuenca": punto.get('Nom_Cuenca'),
+            "nombre_subcuenca": punto.get('Nom_Subcuenca'),
+            "caudal_promedio": safe_round(punto.get('caudal_promedio')),
+            "caudal_minimo": safe_round(punto.get('caudal_minimo')),
+            "caudal_maximo": safe_round(punto.get('caudal_maximo')),
+            "caudal_desviacion_estandar": safe_round(punto.get('caudal_desviacion_estandar')),
+            "n_mediciones": punto.get('n_mediciones', 0)
         }
 
         logging.info(f"Info detallada obtenida para punto {utm_norte}/{utm_este}")
@@ -1074,15 +1063,17 @@ async def get_caudal_por_tiempo_por_cuenca(
             date_filter += " AND FECHA_MEDICION <= ?"
             params.append(fecha_fin)
 
-        # Query Series_Tiempo table with pre-sorted index
+        # Query Series_Tiempo table with daily aggregation
         time_series_query = f"""
         SELECT
-            FECHA_MEDICION as fecha_medicion,
-            CAUDAL as caudal
+            CAST(FECHA_MEDICION AS DATE) as fecha_medicion,
+            AVG(CAST(CAUDAL AS FLOAT)) as caudal
         FROM dw.Series_Tiempo
         WHERE {filter_condition}
           AND CAUDAL IS NOT NULL
           {date_filter}
+        GROUP BY CAST(FECHA_MEDICION AS DATE)
+        ORDER BY CAST(FECHA_MEDICION AS DATE)
         """
 
         results = execute_query(time_series_query, params)
@@ -1093,7 +1084,7 @@ async def get_caudal_por_tiempo_por_cuenca(
         caudal_por_tiempo = [
             {
                 "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
-                "caudal": r.get('caudal')
+                "caudal": safe_round(r.get('caudal'))
             } for r in results
         ]
 
@@ -1134,15 +1125,17 @@ async def get_caudal_por_tiempo_por_subcuenca(
             date_filter += " AND FECHA_MEDICION <= ?"
             params.append(fecha_fin)
 
-        # Query Series_Tiempo table with pre-sorted index
+        # Query Series_Tiempo table with daily aggregation
         time_series_query = f"""
         SELECT
-            FECHA_MEDICION as fecha_medicion,
-            CAUDAL as caudal
+            CAST(FECHA_MEDICION AS DATE) as fecha_medicion,
+            AVG(CAST(CAUDAL AS FLOAT)) as caudal
         FROM dw.Series_Tiempo
         WHERE {filter_condition}
           AND CAUDAL IS NOT NULL
           {date_filter}
+        GROUP BY CAST(FECHA_MEDICION AS DATE)
+        ORDER BY CAST(FECHA_MEDICION AS DATE)
         """
 
         results = execute_query(time_series_query, params)
@@ -1153,7 +1146,7 @@ async def get_caudal_por_tiempo_por_subcuenca(
         caudal_por_tiempo = [
             {
                 "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
-                "caudal": r.get('caudal')
+                "caudal": safe_round(r.get('caudal'))
             } for r in results
         ]
 
@@ -1194,15 +1187,17 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
             date_filter += " AND FECHA_MEDICION <= ?"
             params.append(fecha_fin)
 
-        # Query Series_Tiempo table with pre-sorted index
+        # Query Series_Tiempo table with daily aggregation
         time_series_query = f"""
         SELECT
-            FECHA_MEDICION as fecha_medicion,
-            CAUDAL as caudal
+            CAST(FECHA_MEDICION AS DATE) as fecha_medicion,
+            AVG(CAST(CAUDAL AS FLOAT)) as caudal
         FROM dw.Series_Tiempo
         WHERE {filter_condition}
           AND CAUDAL IS NOT NULL
           {date_filter}
+        GROUP BY CAST(FECHA_MEDICION AS DATE)
+        ORDER BY CAST(FECHA_MEDICION AS DATE)
         """
 
         results = execute_query(time_series_query, params)
@@ -1213,7 +1208,7 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
         caudal_por_tiempo = [
             {
                 "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
-                "caudal": r.get('caudal')
+                "caudal": safe_round(r.get('caudal'))
             } for r in results
         ]
 
@@ -1254,26 +1249,17 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
             date_filter += " AND FECHA_MEDICION <= ?"
             params.append(fecha_fin)
 
-        # Get total count
-        count_query = f"""
-        SELECT COUNT(*) as total
-        FROM dw.Series_Tiempo
-        WHERE {filter_condition}
-          AND ALTURA_LIMNIMETRICA IS NOT NULL
-          {date_filter}
-        """
-        count_result = execute_query(count_query, params)
-        total_count = count_result[0]['total'] if count_result else 0
-
-        # Query Series_Tiempo table with pre-sorted index
+        # Query Series_Tiempo table with daily aggregation
         time_series_query = f"""
         SELECT
-            FECHA_MEDICION as fecha_medicion,
-            ALTURA_LIMNIMETRICA as altura_linimetrica
+            CAST(FECHA_MEDICION AS DATE) as fecha_medicion,
+            AVG(CAST(ALTURA_LIMNIMETRICA AS FLOAT)) as altura_linimetrica
         FROM dw.Series_Tiempo
         WHERE {filter_condition}
           AND ALTURA_LIMNIMETRICA IS NOT NULL
           {date_filter}
+        GROUP BY CAST(FECHA_MEDICION AS DATE)
+        ORDER BY CAST(FECHA_MEDICION AS DATE)
         """
 
         results = execute_query(time_series_query, params)
@@ -1284,14 +1270,13 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
         altura_por_tiempo = [
             {
                 "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
-                "altura_linimetrica": r.get('altura_linimetrica')
+                "altura_linimetrica": safe_round(r.get('altura_linimetrica'))
             } for r in results
         ]
 
         return {
             "cuenca_identificador": cuenca_identificador,
-            "total_registros": total_count,
-            "registros_retornados": len(altura_por_tiempo),
+            "total_registros": len(altura_por_tiempo),
             "altura_por_tiempo": altura_por_tiempo
         }
 
@@ -1326,26 +1311,17 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
             date_filter += " AND FECHA_MEDICION <= ?"
             params.append(fecha_fin)
 
-        # Get total count
-        count_query = f"""
-        SELECT COUNT(*) as total
-        FROM dw.Series_Tiempo
-        WHERE {filter_condition}
-          AND NIVEL_FREATICO IS NOT NULL
-          {date_filter}
-        """
-        count_result = execute_query(count_query, params)
-        total_count = count_result[0]['total'] if count_result else 0
-
-        # Query Series_Tiempo table with pre-sorted index
+        # Query Series_Tiempo table with daily aggregation
         time_series_query = f"""
         SELECT
-            FECHA_MEDICION as fecha_medicion,
-            NIVEL_FREATICO as nivel_freatico
+            CAST(FECHA_MEDICION AS DATE) as fecha_medicion,
+            AVG(CAST(NIVEL_FREATICO AS FLOAT)) as nivel_freatico
         FROM dw.Series_Tiempo
         WHERE {filter_condition}
           AND NIVEL_FREATICO IS NOT NULL
           {date_filter}
+        GROUP BY CAST(FECHA_MEDICION AS DATE)
+        ORDER BY CAST(FECHA_MEDICION AS DATE)
         """
 
         results = execute_query(time_series_query, params)
@@ -1356,14 +1332,13 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
         nivel_por_tiempo = [
             {
                 "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
-                "nivel_freatico": r.get('nivel_freatico')
+                "nivel_freatico": safe_round(r.get('nivel_freatico'))
             } for r in results
         ]
 
         return {
             "cuenca_identificador": cuenca_identificador,
-            "total_registros": total_count,
-            "registros_retornados": len(nivel_por_tiempo),
+            "total_registros": len(nivel_por_tiempo),
             "nivel_por_tiempo": nivel_por_tiempo
         }
 
@@ -1398,26 +1373,17 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
             date_filter += " AND FECHA_MEDICION <= ?"
             params.append(fecha_fin)
 
-        # Get total count
-        count_query = f"""
-        SELECT COUNT(*) as total
-        FROM dw.Series_Tiempo
-        WHERE {filter_condition}
-          AND ALTURA_LIMNIMETRICA IS NOT NULL
-          {date_filter}
-        """
-        count_result = execute_query(count_query, params)
-        total_count = count_result[0]['total'] if count_result else 0
-
-        # Query Series_Tiempo table with pre-sorted index
+        # Query Series_Tiempo table with daily aggregation
         time_series_query = f"""
         SELECT
-            FECHA_MEDICION as fecha_medicion,
-            ALTURA_LIMNIMETRICA as altura_linimetrica
+            CAST(FECHA_MEDICION AS DATE) as fecha_medicion,
+            AVG(CAST(ALTURA_LIMNIMETRICA AS FLOAT)) as altura_linimetrica
         FROM dw.Series_Tiempo
         WHERE {filter_condition}
           AND ALTURA_LIMNIMETRICA IS NOT NULL
           {date_filter}
+        GROUP BY CAST(FECHA_MEDICION AS DATE)
+        ORDER BY CAST(FECHA_MEDICION AS DATE)
         """
 
         results = execute_query(time_series_query, params)
@@ -1428,14 +1394,13 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
         altura_por_tiempo = [
             {
                 "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
-                "altura_linimetrica": r.get('altura_linimetrica')
+                "altura_linimetrica": safe_round(r.get('altura_linimetrica'))
             } for r in results
         ]
 
         return {
             "subcuenca_identificador": cuenca_identificador,
-            "total_registros": total_count,
-            "registros_retornados": len(altura_por_tiempo),
+            "total_registros": len(altura_por_tiempo),
             "altura_por_tiempo": altura_por_tiempo
         }
 
@@ -1470,26 +1435,17 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
             date_filter += " AND FECHA_MEDICION <= ?"
             params.append(fecha_fin)
 
-        # Get total count
-        count_query = f"""
-        SELECT COUNT(*) as total
-        FROM dw.Series_Tiempo
-        WHERE {filter_condition}
-          AND NIVEL_FREATICO IS NOT NULL
-          {date_filter}
-        """
-        count_result = execute_query(count_query, params)
-        total_count = count_result[0]['total'] if count_result else 0
-
-        # Query Series_Tiempo table with pre-sorted index
+        # Query Series_Tiempo table with daily aggregation
         time_series_query = f"""
         SELECT
-            FECHA_MEDICION as fecha_medicion,
-            NIVEL_FREATICO as nivel_freatico
+            CAST(FECHA_MEDICION AS DATE) as fecha_medicion,
+            AVG(CAST(NIVEL_FREATICO AS FLOAT)) as nivel_freatico
         FROM dw.Series_Tiempo
         WHERE {filter_condition}
           AND NIVEL_FREATICO IS NOT NULL
           {date_filter}
+        GROUP BY CAST(FECHA_MEDICION AS DATE)
+        ORDER BY CAST(FECHA_MEDICION AS DATE)
         """
 
         results = execute_query(time_series_query, params)
@@ -1500,14 +1456,13 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
         nivel_por_tiempo = [
             {
                 "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
-                "nivel_freatico": r.get('nivel_freatico')
+                "nivel_freatico": safe_round(r.get('nivel_freatico'))
             } for r in results
         ]
 
         return {
             "subcuenca_identificador": cuenca_identificador,
-            "total_registros": total_count,
-            "registros_retornados": len(nivel_por_tiempo),
+            "total_registros": len(nivel_por_tiempo),
             "nivel_por_tiempo": nivel_por_tiempo
         }
 
@@ -1542,26 +1497,17 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
             date_filter += " AND FECHA_MEDICION <= ?"
             params.append(fecha_fin)
 
-        # Get total count
-        count_query = f"""
-        SELECT COUNT(*) as total
-        FROM dw.Series_Tiempo
-        WHERE {filter_condition}
-          AND ALTURA_LIMNIMETRICA IS NOT NULL
-          {date_filter}
-        """
-        count_result = execute_query(count_query, params)
-        total_count = count_result[0]['total'] if count_result else 0
-
-        # Query Series_Tiempo table with pre-sorted index
+        # Query Series_Tiempo table with daily aggregation
         time_series_query = f"""
         SELECT
-            FECHA_MEDICION as fecha_medicion,
-            ALTURA_LIMNIMETRICA as altura_linimetrica
+            CAST(FECHA_MEDICION AS DATE) as fecha_medicion,
+            AVG(CAST(ALTURA_LIMNIMETRICA AS FLOAT)) as altura_linimetrica
         FROM dw.Series_Tiempo
         WHERE {filter_condition}
           AND ALTURA_LIMNIMETRICA IS NOT NULL
           {date_filter}
+        GROUP BY CAST(FECHA_MEDICION AS DATE)
+        ORDER BY CAST(FECHA_MEDICION AS DATE)
         """
 
         results = execute_query(time_series_query, params)
@@ -1572,14 +1518,13 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
         altura_por_tiempo = [
             {
                 "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
-                "altura_linimetrica": r.get('altura_linimetrica')
+                "altura_linimetrica": safe_round(r.get('altura_linimetrica'))
             } for r in results
         ]
 
         return {
             "subsubcuenca_identificador": cuenca_identificador,
-            "total_registros": total_count,
-            "registros_retornados": len(altura_por_tiempo),
+            "total_registros": len(altura_por_tiempo),
             "altura_por_tiempo": altura_por_tiempo
         }
 
@@ -1614,26 +1559,17 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
             date_filter += " AND FECHA_MEDICION <= ?"
             params.append(fecha_fin)
 
-        # Get total count
-        count_query = f"""
-        SELECT COUNT(*) as total
-        FROM dw.Series_Tiempo
-        WHERE {filter_condition}
-          AND NIVEL_FREATICO IS NOT NULL
-          {date_filter}
-        """
-        count_result = execute_query(count_query, params)
-        total_count = count_result[0]['total'] if count_result else 0
-
-        # Query Series_Tiempo table with pre-sorted index
+        # Query Series_Tiempo table with daily aggregation
         time_series_query = f"""
         SELECT
-            FECHA_MEDICION as fecha_medicion,
-            NIVEL_FREATICO as nivel_freatico
+            CAST(FECHA_MEDICION AS DATE) as fecha_medicion,
+            AVG(CAST(NIVEL_FREATICO AS FLOAT)) as nivel_freatico
         FROM dw.Series_Tiempo
         WHERE {filter_condition}
           AND NIVEL_FREATICO IS NOT NULL
           {date_filter}
+        GROUP BY CAST(FECHA_MEDICION AS DATE)
+        ORDER BY CAST(FECHA_MEDICION AS DATE)
         """
 
         results = execute_query(time_series_query, params)
@@ -1644,14 +1580,13 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
         nivel_por_tiempo = [
             {
                 "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
-                "nivel_freatico": r.get('nivel_freatico')
+                "nivel_freatico": safe_round(r.get('nivel_freatico'))
             } for r in results
         ]
 
         return {
             "subsubcuenca_identificador": cuenca_identificador,
-            "total_registros": total_count,
-            "registros_retornados": len(nivel_por_tiempo),
+            "total_registros": len(nivel_por_tiempo),
             "nivel_por_tiempo": nivel_por_tiempo
         }
 
@@ -1672,21 +1607,32 @@ async def get_point_statistics(locations: List[UTMLocation]):
             # Single location analysis
             loc = locations[0]
 
-            # Caudal statistics
+            # Caudal statistics from pre-calculated Puntos_Mapa table
             caudal_stats_query = """
             SELECT
-                COUNT(*) as count,
-                AVG(CAST(Caudal AS FLOAT)) as avg_val,
-                MIN(CAST(Caudal AS FLOAT)) as min_val,
-                MAX(CAST(Caudal AS FLOAT)) as max_val,
-                STDEV(CAST(Caudal AS FLOAT)) as std_val,
-                MIN(Fecha_Medicion) as primera_fecha,
-                MAX(Fecha_Medicion) as ultima_fecha
-            FROM dw.FACT_Mediciones_Caudal
-            WHERE UTM_Norte = ? AND UTM_Este = ? AND Caudal IS NOT NULL
+                n_mediciones as count,
+                caudal_promedio as avg_val,
+                caudal_minimo as min_val,
+                caudal_maximo as max_val,
+                caudal_desviacion_estandar as std_val
+            FROM dw.Puntos_Mapa
+            WHERE UTM_Norte = ? AND UTM_Este = ?
             """
             caudal_result = execute_query(caudal_stats_query, [loc.utm_norte, loc.utm_este])
             caudal_stats = caudal_result[0] if caudal_result else {}
+
+            # Get date range from FACT table (not available in Puntos_Mapa)
+            if caudal_stats.get('count', 0) > 0:
+                date_query = """
+                SELECT
+                    MIN(Fecha_Medicion) as primera_fecha,
+                    MAX(Fecha_Medicion) as ultima_fecha
+                FROM dw.FACT_Mediciones_Caudal
+                WHERE UTM_Norte = ? AND UTM_Este = ? AND Caudal IS NOT NULL
+                """
+                date_result = execute_query(date_query, [loc.utm_norte, loc.utm_este])
+                if date_result:
+                    caudal_stats.update(date_result[0])
 
             # Altura Limnimetrica statistics
             altura_stats_query = """
