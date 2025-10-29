@@ -16,6 +16,18 @@ from asyncio_pool import AioPool
 import threading
 from queue import Queue, Empty
 
+# Security imports
+from security import (
+    validation_exception_handler,
+    generic_exception_handler,
+    SecurityLoggingMiddleware,
+    LimitPayloadSizeMiddleware,
+    validate_xhr_header,
+    security_logger,
+    log_database_error,
+    log_suspicious_activity
+)
+
 # Load .env only in development (Azure provides env vars automatically)
 # Azure sets WEBSITE_INSTANCE_ID when running in App Service/Functions
 if not os.getenv('WEBSITE_INSTANCE_ID'):
@@ -104,12 +116,21 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # TODO: Configurar con dominio del frontend cuando esté en hosting
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     max_age=86400
 )
+
+# Security middlewares
+app.add_middleware(SecurityLoggingMiddleware)
+app.add_middleware(LimitPayloadSizeMiddleware, max_size=10 * 1024 * 1024)  # 10 MB limit
+
+# Exception handlers for secure error handling
+from fastapi.exceptions import RequestValidationError
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
 
 # Pydantic Models for Request/Response validation
 class UTMLocation(BaseModel):
@@ -609,17 +630,24 @@ async def warm_up_cache():
     description="Obtiene la lista de puntos de medición con coordenadas UTM e indicador de pozo subterráneo. Soporta filtros por región, cuenca, subcuenca, caudal y más."
 )
 async def get_puntos(
-    region: Optional[int] = Query(None, description="Código de región (ej: 15 para Arica y Parinacota)"),
-    cod_cuenca: Optional[int] = Query(None, description="Código de cuenca"),
-    cod_subcuenca: Optional[int] = Query(None, description="Código de subcuenca"),
+    region: Optional[int] = Query(None, ge=1, le=16, description="Código de región (1-16, ej: 15 para Arica y Parinacota)"),
+    cod_cuenca: Optional[int] = Query(None, ge=1, description="Código de cuenca"),
+    cod_subcuenca: Optional[int] = Query(None, ge=1, description="Código de subcuenca"),
     filtro_null_subcuenca: Optional[bool] = Query(None, description="Si es True, filtra por subcuenca nula. Ignora 'cod_subcuenca' si es True."),
-    caudal_minimo: Optional[float] = Query(None, description="Caudal promedio mínimo (l/s)"),
-    caudal_maximo: Optional[float] = Query(None, description="Caudal promedio máximo (l/s)"),
+    caudal_minimo: Optional[float] = Query(None, ge=0, le=1000000, description="Caudal promedio mínimo en l/s (0-1000000)"),
+    caudal_maximo: Optional[float] = Query(None, ge=0, le=1000000, description="Caudal promedio máximo en l/s (0-1000000)"),
     pozo: Optional[bool] = Query(None, description="True para pozo subterráneo, False para punto superficial"),
-    limit: Optional[int] = Query(120, description="Número máximo de puntos a retornar")
+    limit: Optional[int] = Query(120, ge=1, le=10000, description="Número máximo de puntos a retornar (1-10000)")
 ):
     """Obtiene puntos desde la tabla pre-agregada Puntos_Mapa con filtros"""
     try:
+        # Validate caudal_maximo >= caudal_minimo
+        if caudal_minimo is not None and caudal_maximo is not None and caudal_maximo < caudal_minimo:
+            raise HTTPException(
+                status_code=422,
+                detail="caudal_maximo debe ser mayor o igual a caudal_minimo"
+            )
+
         logging.info(f"Parametros recibidos en /puntos: region={region}, cod_cuenca={cod_cuenca}, cod_subcuenca={cod_subcuenca}")
 
         # Build SELECT with TOP if limit specified
@@ -685,8 +713,8 @@ async def get_puntos(
         return puntos_out
 
     except Exception as e:
-        logging.error(f"Error en get_puntos: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail={"error": str(e)})
+        log_database_error("get_puntos", e)
+        raise HTTPException(status_code=500, detail={"error": "Error al obtener puntos de medición"})
 
 @app.get(
     "/puntos/info",
@@ -696,8 +724,8 @@ async def get_puntos(
     description="Obtiene información detallada de un punto de medición específico incluyendo cuenca, subcuenca y estadísticas de caudal. Requiere coordenadas UTM Norte y Este."
 )
 async def get_punto_info(
-    utm_norte: int = Query(..., description="Coordenada UTM Norte en metros", example=6300000),
-    utm_este: int = Query(..., description="Coordenada UTM Este en metros", example=350000)
+    utm_norte: int = Query(..., ge=0, le=10000000, description="Coordenada UTM Norte en metros (0-10000000)", example=6300000),
+    utm_este: int = Query(..., ge=0, le=1000000, description="Coordenada UTM Este en metros (0-1000000)", example=350000)
 ):
     """Obtiene información detallada de un punto específico incluyendo cuenca y caudal"""
     try:

@@ -210,3 +210,5 @@ __marimo__/
 CLAUDE.md
 *.csv
 .python_packages
+SECURITY_IMPLEMENTATION_SUMMARY.md
+BACKEND_SECURITY_TASKS.md
