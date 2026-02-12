@@ -434,7 +434,7 @@ async def health_check():
 async def test_database_connection():
     """Test database connection with record count"""
     try:
-        results = execute_query("SELECT COUNT(*) as total FROM dw.FACT_Mediciones_Caudal")
+        results = execute_query("SELECT COUNT(*) as total FROM dw.Mediciones_full")
         return {
             "status": "success",
             "message": "Database connection successful",
@@ -451,7 +451,7 @@ async def test_database_connection():
 async def get_obras_count():
     """Obtiene el número total de registros en la tabla de mediciones"""
     try:
-        results = execute_query("SELECT COUNT(*) as total FROM dw.FACT_Mediciones_Caudal")
+        results = execute_query("SELECT COUNT(*) as total FROM dw.Mediciones_full")
         return {"total_records": results[0]['total']}
     except Exception as e:
         logging.error(f"Error in get_obras_count: {e}")
@@ -566,7 +566,7 @@ async def warm_up_cache():
 
         # Warm up common queries
         queries = [
-            ("SELECT COUNT(*) as total FROM dw.FACT_Mediciones_Caudal", None),
+            ("SELECT COUNT(*) as total FROM dw.Mediciones_full", None),
             ("SELECT COUNT(DISTINCT CONCAT(UTM_Norte, '-', UTM_Este)) as total_puntos_unicos FROM dw.DIM_Geografia g WHERE g.UTM_Norte IS NOT NULL AND g.UTM_Este IS NOT NULL", None),
             ("SELECT DISTINCT Region FROM dw.DIM_Geografia WHERE Region IS NOT NULL ORDER BY Region", None),
         ]
@@ -725,7 +725,7 @@ async def get_punto_info(
             MIN(CAST(Caudal AS FLOAT)) as caudal_minimo,
             MAX(CAST(Caudal AS FLOAT)) as caudal_maximo,
             COUNT(*) as n_mediciones
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE UTM_Norte = ?
           AND UTM_Este = ?
           AND Caudal IS NOT NULL
@@ -967,7 +967,7 @@ async def get_cuencas_stats(
                 AVG(CAST(Caudal AS FLOAT)) as global_promedio,
                 MIN(CAST(Caudal AS FLOAT)) as global_minimo,
                 MAX(CAST(Caudal AS FLOAT)) as global_maximo
-            FROM dw.FACT_Mediciones_Caudal
+            FROM dw.Mediciones_full
             WHERE Caudal IS NOT NULL
             """
             global_result = execute_query(global_stats_query)
@@ -1058,7 +1058,7 @@ async def get_caudal_por_tiempo_por_cuenca(
         SELECT TOP 1000
             Fecha_Medicion as fecha_medicion,
             Caudal as caudal
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Caudal IS NOT NULL
           {date_filter}
@@ -1137,7 +1137,7 @@ async def get_caudal_por_tiempo_por_subcuenca(
         SELECT TOP 1000
             Fecha_Medicion as fecha_medicion,
             Caudal as caudal
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Caudal IS NOT NULL
           {date_filter}
@@ -1216,7 +1216,7 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
         SELECT TOP 1000
             Fecha_Medicion as fecha_medicion,
             Caudal as caudal
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Caudal IS NOT NULL
           {date_filter}
@@ -1293,7 +1293,7 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Altura_Limnimetrica IS NOT NULL
           {date_filter}
@@ -1306,7 +1306,7 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Altura_Limnimetrica as altura_linimetrica
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Altura_Limnimetrica IS NOT NULL
           {date_filter}
@@ -1384,7 +1384,7 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Nivel_Freatico IS NOT NULL
           {date_filter}
@@ -1397,7 +1397,7 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Nivel_Freatico as nivel_freatico
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Nivel_Freatico IS NOT NULL
           {date_filter}
@@ -1475,7 +1475,7 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Altura_Limnimetrica IS NOT NULL
           {date_filter}
@@ -1488,7 +1488,7 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Altura_Limnimetrica as altura_linimetrica
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Altura_Limnimetrica IS NOT NULL
           {date_filter}
@@ -1566,7 +1566,7 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Nivel_Freatico IS NOT NULL
           {date_filter}
@@ -1579,7 +1579,7 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Nivel_Freatico as nivel_freatico
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Nivel_Freatico IS NOT NULL
           {date_filter}
@@ -1657,7 +1657,7 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Altura_Limnimetrica IS NOT NULL
           {date_filter}
@@ -1670,7 +1670,7 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Altura_Limnimetrica as altura_linimetrica
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Altura_Limnimetrica IS NOT NULL
           {date_filter}
@@ -1748,7 +1748,7 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Nivel_Freatico IS NOT NULL
           {date_filter}
@@ -1761,7 +1761,7 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Nivel_Freatico as nivel_freatico
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE ({utm_conditions})
           AND Nivel_Freatico IS NOT NULL
           {date_filter}
@@ -1814,7 +1814,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
                 STDEV(CAST(Caudal AS FLOAT)) as std_val,
                 MIN(Fecha_Medicion) as primera_fecha,
                 MAX(Fecha_Medicion) as ultima_fecha
-            FROM dw.FACT_Mediciones_Caudal
+            FROM dw.Mediciones_full
             WHERE UTM_Norte = ? AND UTM_Este = ? AND Caudal IS NOT NULL
             """
             caudal_result = execute_query(caudal_stats_query, [loc.utm_norte, loc.utm_este])
@@ -1830,7 +1830,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
                 STDEV(CAST(Altura_Limnimetrica AS FLOAT)) as std_val,
                 MIN(Fecha_Medicion) as primera_fecha,
                 MAX(Fecha_Medicion) as ultima_fecha
-            FROM dw.FACT_Mediciones_Caudal
+            FROM dw.Mediciones_full
             WHERE UTM_Norte = ? AND UTM_Este = ? AND Altura_Limnimetrica IS NOT NULL
             """
             altura_result = execute_query(altura_stats_query, [loc.utm_norte, loc.utm_este])
@@ -1846,7 +1846,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
                 STDEV(CAST(Nivel_Freatico AS FLOAT)) as std_val,
                 MIN(Fecha_Medicion) as primera_fecha,
                 MAX(Fecha_Medicion) as ultima_fecha
-            FROM dw.FACT_Mediciones_Caudal
+            FROM dw.Mediciones_full
             WHERE UTM_Norte = ? AND UTM_Este = ? AND Nivel_Freatico IS NOT NULL
             """
             nivel_result = execute_query(nivel_stats_query, [loc.utm_norte, loc.utm_este])
@@ -1905,7 +1905,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
                 MIN(CAST(Caudal AS FLOAT)) as min_caudal,
                 MAX(CAST(Caudal AS FLOAT)) as max_caudal,
                 STDEV(CAST(Caudal AS FLOAT)) as std_caudal
-            FROM dw.FACT_Mediciones_Caudal
+            FROM dw.Mediciones_full
             WHERE ({coords_conditions})
             AND Caudal IS NOT NULL
             """
@@ -1939,7 +1939,7 @@ async def get_caudal_por_tiempo_por_punto(
         SELECT TOP 1000
             '2023-01-01' as fecha_medicion,  -- Simulated date - replace with actual date field
             Caudal as caudal
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE UTM_Norte = ?
         AND UTM_Este = ?
         AND Caudal IS NOT NULL
@@ -1989,7 +1989,7 @@ async def get_altura_linimetrica_por_tiempo_por_punto(
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE UTM_Norte = ?
           AND UTM_Este = ?
           AND Altura_Limnimetrica IS NOT NULL
@@ -2004,7 +2004,7 @@ async def get_altura_linimetrica_por_tiempo_por_punto(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Altura_Limnimetrica as altura_linimetrica
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE UTM_Norte = ?
           AND UTM_Este = ?
           AND Altura_Limnimetrica IS NOT NULL
@@ -2057,7 +2057,7 @@ async def get_nivel_freatico_por_tiempo_por_punto(
         # Get total count
         count_query = f"""
         SELECT COUNT(*) as total
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE UTM_Norte = ?
           AND UTM_Este = ?
           AND Nivel_Freatico IS NOT NULL
@@ -2072,7 +2072,7 @@ async def get_nivel_freatico_por_tiempo_por_punto(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Nivel_Freatico as nivel_freatico
-        FROM dw.FACT_Mediciones_Caudal
+        FROM dw.Mediciones_full
         WHERE UTM_Norte = ?
           AND UTM_Este = ?
           AND Nivel_Freatico IS NOT NULL
