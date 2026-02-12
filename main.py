@@ -89,7 +89,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.5.1",
+    version="1.5.2",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -567,8 +567,8 @@ async def warm_up_cache():
         # Warm up common queries
         queries = [
             ("SELECT COUNT(*) as total FROM dw.Mediciones_full", None),
-            ("SELECT COUNT(DISTINCT CONCAT(UTM_Norte, '-', UTM_Este)) as total_puntos_unicos FROM dw.DIM_Geografia g WHERE g.UTM_Norte IS NOT NULL AND g.UTM_Este IS NOT NULL", None),
-            ("SELECT DISTINCT Region FROM dw.DIM_Geografia WHERE Region IS NOT NULL ORDER BY Region", None),
+            ("SELECT COUNT(DISTINCT CONCAT(UTM_Norte, '-', UTM_Este)) as total_puntos_unicos FROM dw.Mediciones_full g WHERE g.UTM_Norte IS NOT NULL AND g.UTM_Este IS NOT NULL", None),
+            ("SELECT DISTINCT Region FROM dw.Mediciones_full WHERE Region IS NOT NULL ORDER BY Region", None),
         ]
 
         warmed_queries = 0
@@ -711,7 +711,7 @@ async def get_punto_info(
             Nom_Cuenca,
             Cod_Subcuenca,
             Nom_Subcuenca
-        FROM dw.DIM_Cuenca
+        FROM dw.Mediciones_full
         WHERE UTM_Norte = ?
           AND UTM_Este = ?
         """
@@ -1029,7 +1029,7 @@ async def get_caudal_por_tiempo_por_cuenca(
         # Get UTM coordinates for this cuenca
         utm_query = f"""
         SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
+        FROM dw.Mediciones_full
         WHERE {filter_condition}
           AND UTM_Norte IS NOT NULL
           AND UTM_Este IS NOT NULL
@@ -1108,7 +1108,7 @@ async def get_caudal_por_tiempo_por_subcuenca(
         # Get UTM coordinates for this subcuenca
         utm_query = f"""
         SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
+        FROM dw.Mediciones_full
         WHERE {filter_condition}
           AND UTM_Norte IS NOT NULL
           AND UTM_Este IS NOT NULL
@@ -1187,7 +1187,7 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
         # Get UTM coordinates for this subsubcuenca
         utm_query = f"""
         SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
+        FROM dw.Mediciones_full
         WHERE {filter_condition}
           AND UTM_Norte IS NOT NULL
           AND UTM_Este IS NOT NULL
@@ -1266,7 +1266,7 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
         # Get UTM coordinates for this cuenca
         utm_query = f"""
         SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
+        FROM dw.Mediciones_full
         WHERE {filter_condition}
           AND UTM_Norte IS NOT NULL
           AND UTM_Este IS NOT NULL
@@ -1357,7 +1357,7 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
         # Get UTM coordinates for this cuenca
         utm_query = f"""
         SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
+        FROM dw.Mediciones_full
         WHERE {filter_condition}
           AND UTM_Norte IS NOT NULL
           AND UTM_Este IS NOT NULL
@@ -1448,7 +1448,7 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
         # Get UTM coordinates for this subcuenca
         utm_query = f"""
         SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
+        FROM dw.Mediciones_full
         WHERE {filter_condition}
           AND UTM_Norte IS NOT NULL
           AND UTM_Este IS NOT NULL
@@ -1539,7 +1539,7 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
         # Get UTM coordinates for this subcuenca
         utm_query = f"""
         SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
+        FROM dw.Mediciones_full
         WHERE {filter_condition}
           AND UTM_Norte IS NOT NULL
           AND UTM_Este IS NOT NULL
@@ -1630,7 +1630,7 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
         # Get UTM coordinates for this subsubcuenca
         utm_query = f"""
         SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
+        FROM dw.Mediciones_full
         WHERE {filter_condition}
           AND UTM_Norte IS NOT NULL
           AND UTM_Este IS NOT NULL
@@ -1721,7 +1721,7 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
         # Get UTM coordinates for this subsubcuenca
         utm_query = f"""
         SELECT DISTINCT UTM_Norte, UTM_Este
-        FROM dw.DIM_Cuenca
+        FROM dw.Mediciones_full
         WHERE {filter_condition}
           AND UTM_Norte IS NOT NULL
           AND UTM_Este IS NOT NULL
