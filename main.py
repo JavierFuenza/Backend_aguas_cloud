@@ -725,7 +725,7 @@ async def get_punto_info(
             MIN(CAST(Caudal AS FLOAT)) as caudal_minimo,
             MAX(CAST(Caudal AS FLOAT)) as caudal_maximo,
             COUNT(*) as n_mediciones
-        FROM dw.Mediciones_full
+        FROM dw.Datos
         WHERE UTM_Norte = ?
           AND UTM_Este = ?
           AND Caudal IS NOT NULL
@@ -967,7 +967,7 @@ async def get_cuencas_stats(
                 AVG(CAST(Caudal AS FLOAT)) as global_promedio,
                 MIN(CAST(Caudal AS FLOAT)) as global_minimo,
                 MAX(CAST(Caudal AS FLOAT)) as global_maximo
-            FROM dw.Mediciones_full
+            FROM dw.Datos
             WHERE Caudal IS NOT NULL
             """
             global_result = execute_query(global_stats_query)
@@ -1814,7 +1814,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
                 STDEV(CAST(Caudal AS FLOAT)) as std_val,
                 MIN(Fecha_Medicion) as primera_fecha,
                 MAX(Fecha_Medicion) as ultima_fecha
-            FROM dw.Mediciones_full
+            FROM dw.Datos
             WHERE UTM_Norte = ? AND UTM_Este = ? AND Caudal IS NOT NULL
             """
             caudal_result = execute_query(caudal_stats_query, [loc.utm_norte, loc.utm_este])
@@ -1830,7 +1830,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
                 STDEV(CAST(Altura_Limnimetrica AS FLOAT)) as std_val,
                 MIN(Fecha_Medicion) as primera_fecha,
                 MAX(Fecha_Medicion) as ultima_fecha
-            FROM dw.Mediciones_full
+            FROM dw.Datos
             WHERE UTM_Norte = ? AND UTM_Este = ? AND Altura_Limnimetrica IS NOT NULL
             """
             altura_result = execute_query(altura_stats_query, [loc.utm_norte, loc.utm_este])
@@ -1846,7 +1846,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
                 STDEV(CAST(Nivel_Freatico AS FLOAT)) as std_val,
                 MIN(Fecha_Medicion) as primera_fecha,
                 MAX(Fecha_Medicion) as ultima_fecha
-            FROM dw.Mediciones_full
+            FROM dw.Datos
             WHERE UTM_Norte = ? AND UTM_Este = ? AND Nivel_Freatico IS NOT NULL
             """
             nivel_result = execute_query(nivel_stats_query, [loc.utm_norte, loc.utm_este])
