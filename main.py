@@ -89,7 +89,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.5.2",
+    version="1.5.3",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -1055,10 +1055,10 @@ async def get_caudal_por_tiempo_por_cuenca(
 
         # Query time series data (Note: adjust field name if different)
         time_series_query = f"""
-        SELECT TOP 1000
+        SELECT
             Fecha_Medicion as fecha_medicion,
             Caudal as caudal
-        FROM dw.Mediciones_full
+        FROM dw.Datos
         WHERE ({utm_conditions})
           AND Caudal IS NOT NULL
           {date_filter}
@@ -1137,7 +1137,7 @@ async def get_caudal_por_tiempo_por_subcuenca(
         SELECT TOP 1000
             Fecha_Medicion as fecha_medicion,
             Caudal as caudal
-        FROM dw.Mediciones_full
+        FROM dw.Datos
         WHERE ({utm_conditions})
           AND Caudal IS NOT NULL
           {date_filter}
@@ -1213,10 +1213,10 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
 
         # Query time series data
         time_series_query = f"""
-        SELECT TOP 1000
+        SELECT
             Fecha_Medicion as fecha_medicion,
             Caudal as caudal
-        FROM dw.Mediciones_full
+        FROM dw.Datos
         WHERE ({utm_conditions})
           AND Caudal IS NOT NULL
           {date_filter}
@@ -1306,7 +1306,7 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Altura_Limnimetrica as altura_linimetrica
-        FROM dw.Mediciones_full
+        FROM dw.Datos
         WHERE ({utm_conditions})
           AND Altura_Limnimetrica IS NOT NULL
           {date_filter}
@@ -1397,7 +1397,7 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Nivel_Freatico as nivel_freatico
-        FROM dw.Mediciones_full
+        FROM dw.Datos
         WHERE ({utm_conditions})
           AND Nivel_Freatico IS NOT NULL
           {date_filter}
@@ -1488,7 +1488,7 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Altura_Limnimetrica as altura_linimetrica
-        FROM dw.Mediciones_full
+        FROM dw.Datos
         WHERE ({utm_conditions})
           AND Altura_Limnimetrica IS NOT NULL
           {date_filter}
@@ -1579,7 +1579,7 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Nivel_Freatico as nivel_freatico
-        FROM dw.Mediciones_full
+        FROM dw.Datos
         WHERE ({utm_conditions})
           AND Nivel_Freatico IS NOT NULL
           {date_filter}
@@ -1670,7 +1670,7 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Altura_Limnimetrica as altura_linimetrica
-        FROM dw.Mediciones_full
+        FROM dw.Datos
         WHERE ({utm_conditions})
           AND Altura_Limnimetrica IS NOT NULL
           {date_filter}
@@ -1761,7 +1761,7 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Nivel_Freatico as nivel_freatico
-        FROM dw.Mediciones_full
+        FROM dw.DAtos
         WHERE ({utm_conditions})
           AND Nivel_Freatico IS NOT NULL
           {date_filter}
@@ -1905,7 +1905,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
                 MIN(CAST(Caudal AS FLOAT)) as min_caudal,
                 MAX(CAST(Caudal AS FLOAT)) as max_caudal,
                 STDEV(CAST(Caudal AS FLOAT)) as std_caudal
-            FROM dw.Mediciones_full
+            FROM dw.Datos
             WHERE ({coords_conditions})
             AND Caudal IS NOT NULL
             """
@@ -1936,10 +1936,10 @@ async def get_caudal_por_tiempo_por_punto(
     """Obtiene el caudal extraído a lo largo del tiempo para un punto UTM específico"""
     try:
         time_series_query = """
-        SELECT TOP 1000
-            '2023-01-01' as fecha_medicion,  -- Simulated date - replace with actual date field
+        SELECT
+            Fecha_Medicion as fecha_medicion,
             Caudal as caudal
-        FROM dw.Mediciones_full
+        FROM dw.Datos
         WHERE UTM_Norte = ?
         AND UTM_Este = ?
         AND Caudal IS NOT NULL
@@ -2004,7 +2004,7 @@ async def get_altura_linimetrica_por_tiempo_por_punto(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Altura_Limnimetrica as altura_linimetrica
-        FROM dw.Mediciones_full
+        FROM dw.Datos
         WHERE UTM_Norte = ?
           AND UTM_Este = ?
           AND Altura_Limnimetrica IS NOT NULL
@@ -2072,7 +2072,7 @@ async def get_nivel_freatico_por_tiempo_por_punto(
         SELECT
             Fecha_Medicion as fecha_medicion,
             Nivel_Freatico as nivel_freatico
-        FROM dw.Mediciones_full
+        FROM dw.Datos
         WHERE UTM_Norte = ?
           AND UTM_Este = ?
           AND Nivel_Freatico IS NOT NULL
