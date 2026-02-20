@@ -1005,149 +1005,273 @@ async def get_cuencas_stats(
         logging.error(f"Error in get_cuencas_stats: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/cuenca/series_de_tiempo/caudal",
-    tags=["Series Temporales"],
-    summary="Serie temporal de caudal por cuenca",
-    description="Obtiene la serie temporal de caudal para una cuenca específica (máximo 1000 registros más recientes). Acepta código numérico o nombre de cuenca. Opcionalmente filtra por rango de fechas (YYYY-MM-DD)."
-)
+@app.get("/cuencas/cuenca/series_de_tiempo/caudal", tags=["Series Temporales"], summary="Serie temporal de caudal por cuenca")
 async def get_caudal_por_tiempo_por_cuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
     fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31")
 ):
     try:
-        filters = []
-        params = []
-
-        # Filtro por cuenca (código o nombre)
         if cuenca_identificador.isdigit():
-            filters.append("COD_CUENCA = ?")
-            params.append(int(cuenca_identificador))
+            subquery_filter = "m.Cod_Cuenca = ?"
+            params = [int(cuenca_identificador)]
         else:
-            filters.append("NOM_CUENCA = ?")
-            params.append(cuenca_identificador)
-
-        # Filtros de fecha
-        if fecha_inicio:
-            filters.append("FECHA_MEDICION >= ?")
-            params.append(fecha_inicio)
-
-        if fecha_fin:
-            filters.append("FECHA_MEDICION <= ?")
-            params.append(fecha_fin)
-
-        where_clause = " AND ".join(filters)
+            subquery_filter = "m.Nom_Cuenca = ?"
+            params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000)
-            FECHA_MEDICION AS fecha_medicion,
-            CAUDAL AS caudal
-        FROM dw.Series_Tiempo
-        WHERE {where_clause}
-          AND CAUDAL IS NOT NULL
-        ORDER BY FECHA_MEDICION DESC
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Caudal AS caudal
+        FROM dw.Datos d
+        WHERE EXISTS (
+            SELECT 1 FROM dw.Mediciones_full m
+            WHERE {subquery_filter} AND m.UTM_Norte = d.UTM_Norte AND m.UTM_Este = d.UTM_Este
+        )
+        AND d.Caudal IS NOT NULL
         """
+        if fecha_inicio:
+            query += " AND d.Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            query += " AND d.Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+        query += " ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
-
         if not results:
-            raise HTTPException(status_code=404, detail="No se encontraron datos de caudal para el período o cuenca especificada.")
+            raise HTTPException(status_code=404, detail="No se encontraron datos.")
 
-        caudal_por_tiempo = [
-            {
-                "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None,
-                "caudal": r["caudal"]
-            }
-            for r in results
-        ]
+        caudal_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "caudal": r["caudal"]} for r in results]
+        return {"cuenca_identificador": cuenca_identificador, "total_registros": len(caudal_por_tiempo), "caudal_por_tiempo": caudal_por_tiempo}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
 
-        return {
-            "cuenca_identificador": cuenca_identificador,
-            "total_registros": len(caudal_por_tiempo),
-            "caudal_por_tiempo": caudal_por_tiempo
-        }
+@app.get("/cuencas/cuenca/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"], summary="Serie temporal de altura limnimétrica por cuenca")
+async def get_altura_linimetrica_por_tiempo_por_cuenca(
+    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+):
+    try:
+        if cuenca_identificador.isdigit():
+            subquery_filter = "m.Cod_Cuenca = ?"
+            params = [int(cuenca_identificador)]
+        else:
+            subquery_filter = "m.Nom_Cuenca = ?"
+            params = [cuenca_identificador]
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Error in get_caudal_por_tiempo_por_cuenca: {e}")
-        raise HTTPException(status_code=500, detail={"error": str(e)})
+        query = f"""
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Altura_Limnimetrica AS altura_linimetrica
+        FROM dw.Datos d
+        WHERE EXISTS (
+            SELECT 1 FROM dw.Mediciones_full m
+            WHERE {subquery_filter} AND m.UTM_Norte = d.UTM_Norte AND m.UTM_Este = d.UTM_Este
+        )
+        AND d.Altura_Limnimetrica IS NOT NULL
+        """
+        if fecha_inicio:
+            query += " AND d.Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            query += " AND d.Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+        query += " ORDER BY d.Fecha_Medicion DESC"
 
-@app.get("/cuencas/subcuenca/series_de_tiempo/caudal",
-    tags=["Series Temporales"],
-    summary="Serie temporal de caudal por subcuenca",
-    description="Obtiene la serie temporal de caudal para una subcuenca específica (máximo 1000 registros más recientes). Acepta código numérico o nombre de subcuenca. Opcionalmente filtra por rango de fechas (YYYY-MM-DD)."
-)
+        results = execute_query(query, params)
+        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
+
+        altura_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "altura_linimetrica": r["altura_linimetrica"]} for r in results]
+        return {"cuenca_identificador": cuenca_identificador, "total_registros": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get("/cuencas/cuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"], summary="Serie temporal de nivel freático por cuenca")
+async def get_nivel_freatico_por_tiempo_por_cuenca(
+    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+):
+    try:
+        if cuenca_identificador.isdigit():
+            subquery_filter = "m.Cod_Cuenca = ?"
+            params = [int(cuenca_identificador)]
+        else:
+            subquery_filter = "m.Nom_Cuenca = ?"
+            params = [cuenca_identificador]
+
+        query = f"""
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Nivel_Freatico AS nivel_freatico
+        FROM dw.Datos d
+        WHERE EXISTS (
+            SELECT 1 FROM dw.Mediciones_full m
+            WHERE {subquery_filter} AND m.UTM_Norte = d.UTM_Norte AND m.UTM_Este = d.UTM_Este
+        )
+        AND d.Nivel_Freatico IS NOT NULL
+        """
+        if fecha_inicio:
+            query += " AND d.Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            query += " AND d.Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+        query += " ORDER BY d.Fecha_Medicion DESC"
+
+        results = execute_query(query, params)
+        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
+
+        nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results]
+        return {"cuenca_identificador": cuenca_identificador, "total_registros": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get("/cuencas/subcuenca/series_de_tiempo/caudal", tags=["Series Temporales"], summary="Serie temporal de caudal por subcuenca")
 async def get_caudal_por_tiempo_por_subcuenca(
+    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subcuenca", example="205"),
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+):
+    try:
+        if cuenca_identificador.isdigit():
+            subquery_filter = "m.Cod_Subcuenca = ?"
+            params = [int(cuenca_identificador)]
+        else:
+            subquery_filter = "m.Nom_Subcuenca = ?"
+            params = [cuenca_identificador]
+
+        query = f"""
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Caudal AS caudal
+        FROM dw.Datos d
+        WHERE EXISTS (
+            SELECT 1 FROM dw.Mediciones_full m
+            WHERE {subquery_filter} AND m.UTM_Norte = d.UTM_Norte AND m.UTM_Este = d.UTM_Este
+        )
+        AND d.Caudal IS NOT NULL
+        """
+        if fecha_inicio:
+            query += " AND d.Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            query += " AND d.Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+        query += " ORDER BY d.Fecha_Medicion DESC"
+
+        results = execute_query(query, params)
+        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
+
+        caudal_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "caudal": r["caudal"]} for r in results]
+        return {"subcuenca_identificador": cuenca_identificador, "total_registros": len(caudal_por_tiempo), "caudal_por_tiempo": caudal_por_tiempo}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get("/cuencas/subcuenca/series_de_tiempo/altura_linimetrica", 
+    tags=["Series Temporales"], 
+    summary="Serie temporal de altura limnimétrica por subcuenca",
+    description="Obtiene la serie temporal de altura limnimétrica para una subcuenca específica (máximo 1000 registros más recientes)."
+)
+async def get_altura_linimetrica_por_tiempo_por_subcuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subcuenca", example="205"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
     fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31")
 ):
     try:
-        filters = []
-        params = []
-
-        # Filtro por subcuenca (código o nombre)
+        # Determinamos si filtramos por código o por nombre
         if cuenca_identificador.isdigit():
-            filters.append("Cod_Subcuenca = ?")
-            params.append(int(cuenca_identificador))
+            subquery_filter = "m.Cod_Subcuenca = ?"
+            params = [int(cuenca_identificador)]
         else:
-            filters.append("Nom_Subcuenca = ?")
-            params.append(cuenca_identificador)
+            subquery_filter = "m.Nom_Subcuenca = ?"
+            params = [cuenca_identificador]
 
-        # Filtros de fecha
-        if fecha_inicio:
-            filters.append("Fecha_Medicion >= ?")
-            params.append(fecha_inicio)
-
-        if fecha_fin:
-            filters.append("Fecha_Medicion <= ?")
-            params.append(fecha_fin)
-
-        where_clause = " AND ".join(filters)
-
+        # Consulta unificada optimizada para Azure SQL usando EXISTS
         query = f"""
-        SELECT TOP (1000)
-            Fecha_Medicion AS fecha_medicion,
-            Caudal AS caudal
-        FROM dw.Datos
-        WHERE {where_clause}
-          AND Caudal IS NOT NULL
-        ORDER BY Fecha_Medicion DESC
+        SELECT TOP (1000) 
+            d.Fecha_Medicion AS fecha_medicion, 
+            d.Altura_Limnimetrica AS altura_linimetrica
+        FROM dw.Datos d
+        WHERE EXISTS (
+            SELECT 1 
+            FROM dw.Mediciones_full m
+            WHERE {subquery_filter} 
+              AND m.UTM_Norte = d.UTM_Norte 
+              AND m.UTM_Este = d.UTM_Este
+        )
+        AND d.Altura_Limnimetrica IS NOT NULL
         """
+
+        # Agregar filtros de fecha a los parámetros de forma segura
+        if fecha_inicio:
+            query += " AND d.Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+            
+        if fecha_fin:
+            query += " AND d.Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+            
+        query += " ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
 
         if not results:
-            raise HTTPException(
-                status_code=404,
-                detail="No se encontraron datos de caudal para el período o subcuenca especificada."
-            )
+            raise HTTPException(status_code=404, detail="No se encontraron datos de altura limnimétrica para el período o subcuenca especificada.")
 
-        caudal_por_tiempo = [
+        altura_por_tiempo = [
             {
                 "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None,
-                "caudal": r["caudal"]
+                "altura_linimetrica": r["altura_linimetrica"]
             }
             for r in results
         ]
 
         return {
             "subcuenca_identificador": cuenca_identificador,
-            "total_registros": len(caudal_por_tiempo),
-            "caudal_por_tiempo": caudal_por_tiempo
+            "total_registros": len(altura_por_tiempo),
+            "altura_por_tiempo": altura_por_tiempo
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"Error in get_caudal_por_tiempo_por_subcuenca: {e}")
+        logging.error(f"Error in get_altura_linimetrica_por_tiempo_por_subcuenca: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/subsubcuenca/series_de_tiempo/caudal",
-    tags=["Series Temporales"],
+@app.get("/cuencas/subcuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"], summary="Serie temporal de nivel freático por subcuenca")
+async def get_nivel_freatico_por_tiempo_por_subcuenca(
+    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subcuenca", example="205"),
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+):
+    try:
+        if cuenca_identificador.isdigit():
+            subquery_filter = "m.Cod_Subcuenca = ?"
+            params = [int(cuenca_identificador)]
+        else:
+            subquery_filter = "m.Nom_Subcuenca = ?"
+            params = [cuenca_identificador]
+
+        query = f"""
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Nivel_Freatico AS nivel_freatico
+        FROM dw.Datos d
+        WHERE EXISTS (
+            SELECT 1 FROM dw.Mediciones_full m
+            WHERE {subquery_filter} AND m.UTM_Norte = d.UTM_Norte AND m.UTM_Este = d.UTM_Este
+        )
+        AND d.Nivel_Freatico IS NOT NULL
+        """
+        if fecha_inicio:
+            query += " AND d.Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            query += " AND d.Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+        query += " ORDER BY d.Fecha_Medicion DESC"
+
+        results = execute_query(query, params)
+        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
+
+        nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results]
+        return {"subcuenca_identificador": cuenca_identificador, "total_registros": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get("/cuencas/subsubcuenca/series_de_tiempo/caudal", 
+    tags=["Series Temporales"], 
     summary="Serie temporal de caudal por subsubcuenca",
-    description="Obtiene la serie temporal de caudal para una subsubcuenca específica (máximo 1000 registros más recientes). Acepta código numérico o nombre de subsubcuenca. Opcionalmente filtra por rango de fechas (YYYY-MM-DD)."
+    description="Obtiene la serie temporal de caudal para una subsubcuenca específica (máximo 1000 registros más recientes)."
 )
 async def get_caudal_por_tiempo_por_subsubcuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subsubcuenca", example="305"),
@@ -1155,45 +1279,45 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
     fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31")
 ):
     try:
-        filters = []
-        params = []
-
-        # Filtro por subsubcuenca (código o nombre)
+        # Determinamos si filtramos por código o por nombre
         if cuenca_identificador.isdigit():
-            filters.append("Cod_Subsubcuenca = ?")
-            params.append(int(cuenca_identificador))
+            subquery_filter = "m.Cod_Subsubcuenca = ?"
+            params = [int(cuenca_identificador)]
         else:
-            filters.append("Nom_Subsubcuenca = ?")
-            params.append(cuenca_identificador)
+            subquery_filter = "m.Nom_Subsubcuenca = ?"
+            params = [cuenca_identificador]
 
-        # Filtros de fecha
-        if fecha_inicio:
-            filters.append("Fecha_Medicion >= ?")
-            params.append(fecha_inicio)
-
-        if fecha_fin:
-            filters.append("Fecha_Medicion <= ?")
-            params.append(fecha_fin)
-
-        where_clause = " AND ".join(filters)
-
+        # Consulta unificada optimizada para Azure SQL usando EXISTS
         query = f"""
-        SELECT TOP (1000)
-            Fecha_Medicion AS fecha_medicion,
-            Caudal AS caudal
-        FROM dw.Datos
-        WHERE {where_clause}
-          AND Caudal IS NOT NULL
-        ORDER BY Fecha_Medicion DESC
+        SELECT TOP (1000) 
+            d.Fecha_Medicion AS fecha_medicion, 
+            d.Caudal AS caudal
+        FROM dw.Datos d
+        WHERE EXISTS (
+            SELECT 1 
+            FROM dw.Mediciones_full m
+            WHERE {subquery_filter} 
+              AND m.UTM_Norte = d.UTM_Norte 
+              AND m.UTM_Este = d.UTM_Este
+        )
+        AND d.Caudal IS NOT NULL
         """
+
+        # Agregar filtros de fecha a los parámetros de forma segura
+        if fecha_inicio:
+            query += " AND d.Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+            
+        if fecha_fin:
+            query += " AND d.Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+            
+        query += " ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
 
         if not results:
-            raise HTTPException(
-                status_code=404,
-                detail="No se encontraron datos de caudal para el período o subsubcuenca especificada."
-            )
+            raise HTTPException(status_code=404, detail="No se encontraron datos de caudal para el período o subsubcuenca especificada.")
 
         caudal_por_tiempo = [
             {
@@ -1215,354 +1339,185 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
         logging.error(f"Error in get_caudal_por_tiempo_por_subsubcuenca: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@app.get("/cuencas/cuenca/series_de_tiempo/altura_linimetrica",
-    tags=["Series Temporales"],
-    summary="Serie temporal de altura limnimétrica por cuenca",
-    description="Obtiene la serie temporal de altura limnimétrica para una cuenca específica (máximo 1000 registros más recientes). Acepta código numérico o nombre de cuenca. Opcionalmente filtra por rango de fechas (YYYY-MM-DD)."
-)
-async def get_altura_linimetrica_por_tiempo_por_cuenca(
-    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31")
-):
-    try:
-        filters = []
-        params = []
-
-        # Filtro por cuenca (código o nombre)
-        if cuenca_identificador.isdigit():
-            filters.append("COD_CUENCA = ?")
-            params.append(int(cuenca_identificador))
-        else:
-            filters.append("NOM_CUENCA = ?")
-            params.append(cuenca_identificador)
-
-        # Filtros de fecha
-        if fecha_inicio:
-            filters.append("FECHA_MEDICION >= ?")
-            params.append(fecha_inicio)
-
-        if fecha_fin:
-            filters.append("FECHA_MEDICION <= ?")
-            params.append(fecha_fin)
-
-        where_clause = " AND ".join(filters)
-
-        query = f"""
-        SELECT TOP (1000)
-            FECHA_MEDICION AS fecha_medicion,
-            ALTURA_LIMNIMETRICA AS altura_linimetrica
-        FROM dw.Series_Tiempo
-        WHERE {where_clause}
-          AND ALTURA_LIMNIMETRICA IS NOT NULL
-        ORDER BY FECHA_MEDICION DESC
-        """
-
-        results = execute_query(query, params)
-
-        if not results:
-            raise HTTPException(
-                status_code=404,
-                detail="No se encontraron datos de altura limnimétrica para el período o cuenca especificada."
-            )
-
-        altura_por_tiempo = [
-            {
-                "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None,
-                "altura_linimetrica": r["altura_linimetrica"]
-            }
-            for r in results
-        ]
-
-        return {
-            "cuenca_identificador": cuenca_identificador,
-            "total_registros": len(altura_por_tiempo),
-            "altura_por_tiempo": altura_por_tiempo
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Error in get_altura_linimetrica_por_tiempo_por_cuenca: {e}")
-        raise HTTPException(status_code=500, detail={"error": str(e)})
-
-@app.get("/cuencas/cuenca/series_de_tiempo/nivel_freatico",
-    tags=["Series Temporales"],
-    summary="Serie temporal de nivel freático por cuenca",
-    description="Obtiene la serie temporal de nivel freático para una cuenca específica (máximo 1000 registros más recientes). Acepta código numérico o nombre de cuenca. Opcionalmente filtra por rango de fechas (YYYY-MM-DD)."
-)
-async def get_nivel_freatico_por_tiempo_por_cuenca(
-    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31")
-):
-    try:
-        filters = []
-        params = []
-
-        # Filtro por cuenca (código o nombre)
-        if cuenca_identificador.isdigit():
-            filters.append("COD_CUENCA = ?")
-            params.append(int(cuenca_identificador))
-        else:
-            filters.append("NOM_CUENCA = ?")
-            params.append(cuenca_identificador)
-
-        # Filtros de fecha
-        if fecha_inicio:
-            filters.append("FECHA_MEDICION >= ?")
-            params.append(fecha_inicio)
-
-        if fecha_fin:
-            filters.append("FECHA_MEDICION <= ?")
-            params.append(fecha_fin)
-
-        where_clause = " AND ".join(filters)
-
-        query = f"""
-        SELECT TOP (1000)
-            FECHA_MEDICION AS fecha_medicion,
-            NIVEL_FREATICO AS nivel_freatico
-        FROM dw.Series_Tiempo
-        WHERE {where_clause}
-          AND NIVEL_FREATICO IS NOT NULL
-        ORDER BY FECHA_MEDICION DESC
-        """
-
-        results = execute_query(query, params)
-
-        if not results:
-            raise HTTPException(
-                status_code=404,
-                detail="No se encontraron datos de nivel freático para el período o cuenca especificada."
-            )
-
-        nivel_por_tiempo = [
-            {
-                "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None,
-                "nivel_freatico": r["nivel_freatico"]
-            }
-            for r in results
-        ]
-
-        return {
-            "cuenca_identificador": cuenca_identificador,
-            "total_registros": len(nivel_por_tiempo),
-            "nivel_por_tiempo": nivel_por_tiempo
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Error in get_nivel_freatico_por_tiempo_por_cuenca: {e}")
-        raise HTTPException(status_code=500, detail={"error": str(e)})
-
-@app.get("/cuencas/subcuenca/series_de_tiempo/nivel_freatico",
-    tags=["Series Temporales"],
-    summary="Serie temporal de nivel freático por subcuenca",
-    description="Obtiene la serie temporal de nivel freático para una subcuenca específica (máximo 1000 registros más recientes). Acepta código numérico o nombre de subcuenca. Opcionalmente filtra por rango de fechas (YYYY-MM-DD)."
-)
-async def get_nivel_freatico_por_tiempo_por_subcuenca(
-    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subcuenca", example="205"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31")
-):
-    try:
-        filters = []
-        params = []
-
-        if cuenca_identificador.isdigit():
-            filters.append("Cod_Subcuenca = ?")
-            params.append(int(cuenca_identificador))
-        else:
-            filters.append("Nom_Subcuenca = ?")
-            params.append(cuenca_identificador)
-
-        if fecha_inicio:
-            filters.append("Fecha_Medicion >= ?")
-            params.append(fecha_inicio)
-
-        if fecha_fin:
-            filters.append("Fecha_Medicion <= ?")
-            params.append(fecha_fin)
-
-        where_clause = " AND ".join(filters)
-
-        query = f"""
-        SELECT TOP (1000)
-            Fecha_Medicion AS fecha_medicion,
-            Nivel_Freatico AS nivel_freatico
-        FROM dw.Datos
-        WHERE {where_clause}
-          AND Nivel_Freatico IS NOT NULL
-        ORDER BY Fecha_Medicion DESC
-        """
-
-        results = execute_query(query, params)
-
-        if not results:
-            raise HTTPException(
-                status_code=404,
-                detail="No se encontraron datos de nivel freático para el período o subcuenca especificada."
-            )
-
-        nivel_por_tiempo = [
-            {
-                "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None,
-                "nivel_freatico": r["nivel_freatico"]
-            }
-            for r in results
-        ]
-
-        return {
-            "subcuenca_identificador": cuenca_identificador,
-            "total_registros": len(nivel_por_tiempo),
-            "nivel_por_tiempo": nivel_por_tiempo
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Error in get_nivel_freatico_por_tiempo_por_subcuenca: {e}")
-        raise HTTPException(status_code=500, detail={"error": str(e)})
-
-@app.get("/cuencas/subsubcuenca/series_de_tiempo/altura_linimetrica",
-    tags=["Series Temporales"],
-    summary="Serie temporal de altura limnimétrica por subsubcuenca",
-    description="Obtiene la serie temporal de altura limnimétrica para una subsubcuenca específica (máximo 1000 registros más recientes). Acepta código numérico o nombre de subsubcuenca. Opcionalmente filtra por rango de fechas (YYYY-MM-DD)."
-)
+@app.get("/cuencas/subsubcuenca/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"], summary="Serie temporal de altura limnimétrica por subsubcuenca")
 async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subsubcuenca", example="305"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31")
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
 ):
     try:
-        filters = []
-        params = []
-
         if cuenca_identificador.isdigit():
-            filters.append("Cod_Subsubcuenca = ?")
-            params.append(int(cuenca_identificador))
+            subquery_filter = "m.Cod_Subsubcuenca = ?"
+            params = [int(cuenca_identificador)]
         else:
-            filters.append("Nom_Subsubcuenca = ?")
-            params.append(cuenca_identificador)
-
-        if fecha_inicio:
-            filters.append("Fecha_Medicion >= ?")
-            params.append(fecha_inicio)
-
-        if fecha_fin:
-            filters.append("Fecha_Medicion <= ?")
-            params.append(fecha_fin)
-
-        where_clause = " AND ".join(filters)
+            subquery_filter = "m.Nom_Subsubcuenca = ?"
+            params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000)
-            Fecha_Medicion AS fecha_medicion,
-            Altura_Limnimetrica AS altura_linimetrica
-        FROM dw.Datos
-        WHERE {where_clause}
-          AND Altura_Limnimetrica IS NOT NULL
-        ORDER BY Fecha_Medicion DESC
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Altura_Limnimetrica AS altura_linimetrica
+        FROM dw.Datos d
+        WHERE EXISTS (
+            SELECT 1 FROM dw.Mediciones_full m
+            WHERE {subquery_filter} AND m.UTM_Norte = d.UTM_Norte AND m.UTM_Este = d.UTM_Este
+        )
+        AND d.Altura_Limnimetrica IS NOT NULL
         """
+        if fecha_inicio:
+            query += " AND d.Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            query += " AND d.Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+        query += " ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
+        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
 
-        if not results:
-            raise HTTPException(
-                status_code=404,
-                detail="No se encontraron datos de altura limnimétrica para el período o subsubcuenca especificada."
-            )
+        altura_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "altura_linimetrica": r["altura_linimetrica"]} for r in results]
+        return {"subsubcuenca_identificador": cuenca_identificador, "total_registros": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
 
-        altura_por_tiempo = [
-            {
-                "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None,
-                "altura_linimetrica": r["altura_linimetrica"]
-            }
-            for r in results
-        ]
-
-        return {
-            "subsubcuenca_identificador": cuenca_identificador,
-            "total_registros": len(altura_por_tiempo),
-            "altura_por_tiempo": altura_por_tiempo
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Error in get_altura_linimetrica_por_tiempo_por_subsubcuenca: {e}")
-        raise HTTPException(status_code=500, detail={"error": str(e)})
-
-@app.get("/cuencas/subsubcuenca/series_de_tiempo/nivel_freatico",
-    tags=["Series Temporales"],
-    summary="Serie temporal de nivel freático por subsubcuenca",
-    description="Obtiene la serie temporal de nivel freático para una subsubcuenca específica (máximo 1000 registros más recientes). Acepta código numérico o nombre de subsubcuenca. Opcionalmente filtra por rango de fechas (YYYY-MM-DD)."
-)
+@app.get("/cuencas/subsubcuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"], summary="Serie temporal de nivel freático por subsubcuenca")
 async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subsubcuenca", example="305"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31")
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
 ):
     try:
-        filters = []
-        params = []
-
         if cuenca_identificador.isdigit():
-            filters.append("Cod_Subsubcuenca = ?")
-            params.append(int(cuenca_identificador))
+            subquery_filter = "m.Cod_Subsubcuenca = ?"
+            params = [int(cuenca_identificador)]
         else:
-            filters.append("Nom_Subsubcuenca = ?")
-            params.append(cuenca_identificador)
-
-        if fecha_inicio:
-            filters.append("Fecha_Medicion >= ?")
-            params.append(fecha_inicio)
-
-        if fecha_fin:
-            filters.append("Fecha_Medicion <= ?")
-            params.append(fecha_fin)
-
-        where_clause = " AND ".join(filters)
+            subquery_filter = "m.Nom_Subsubcuenca = ?"
+            params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000)
-            Fecha_Medicion AS fecha_medicion,
-            Nivel_Freatico AS nivel_freatico
-        FROM dw.Datos
-        WHERE {where_clause}
-          AND Nivel_Freatico IS NOT NULL
-        ORDER BY Fecha_Medicion DESC
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Nivel_Freatico AS nivel_freatico
+        FROM dw.Datos d
+        WHERE EXISTS (
+            SELECT 1 FROM dw.Mediciones_full m
+            WHERE {subquery_filter} AND m.UTM_Norte = d.UTM_Norte AND m.UTM_Este = d.UTM_Este
+        )
+        AND d.Nivel_Freatico IS NOT NULL
         """
+        if fecha_inicio:
+            query += " AND d.Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            query += " AND d.Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+        query += " ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
+        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
 
-        if not results:
-            raise HTTPException(
-                status_code=404,
-                detail="No se encontraron datos de nivel freático para el período o subsubcuenca especificada."
-            )
+        nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results]
+        return {"subsubcuenca_identificador": cuenca_identificador, "total_registros": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
 
-        nivel_por_tiempo = [
-            {
-                "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None,
-                "nivel_freatico": r["nivel_freatico"]
-            }
-            for r in results
-        ]
+@app.get("/puntos/series_de_tiempo/caudal", tags=["Series Temporales"])
+async def get_caudal_por_tiempo_por_punto(
+    utm_norte: int = Query(...), utm_este: int = Query(...),
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+):
+    try:
+        query = """
+        SELECT TOP (1000) Fecha_Medicion as fecha_medicion, Caudal as caudal
+        FROM dw.Datos
+        WHERE UTM_Norte = ? AND UTM_Este = ? AND Caudal IS NOT NULL
+        """
+        params = [utm_norte, utm_este]
+        if fecha_inicio:
+            query += " AND Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            query += " AND Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+        query += " ORDER BY Fecha_Medicion DESC"
 
-        return {
-            "subsubcuenca_identificador": cuenca_identificador,
-            "total_registros": len(nivel_por_tiempo),
-            "nivel_por_tiempo": nivel_por_tiempo
-        }
+        results = execute_query(query, params)
+        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.error(f"Error in get_nivel_freatico_por_tiempo_por_subsubcuenca: {e}")
-        raise HTTPException(status_code=500, detail={"error": str(e)})
+        caudal_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "caudal": r.get('caudal')} for r in results]
+        return {"utm_norte": utm_norte, "utm_este": utm_este, "total_registros": len(caudal_por_tiempo), "caudal_por_tiempo": caudal_por_tiempo}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get("/puntos/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"])
+async def get_altura_linimetrica_por_tiempo_por_punto(
+    utm_norte: int = Query(...), utm_este: int = Query(...),
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+):
+    try:
+        # Obtener count (con parámetros seguros)
+        count_query = "SELECT COUNT(*) as total FROM dw.Datos WHERE UTM_Norte = ? AND UTM_Este = ? AND Altura_Limnimetrica IS NOT NULL"
+        count_params = [utm_norte, utm_este]
+        if fecha_inicio:
+            count_query += " AND Fecha_Medicion >= ?"
+            count_params.append(fecha_inicio)
+        if fecha_fin:
+            count_query += " AND Fecha_Medicion <= ?"
+            count_params.append(fecha_fin)
+            
+        count_result = execute_query(count_query, count_params)
+        total_count = count_result[0]['total'] if count_result else 0
+
+        # Obtener datos (con parámetros seguros)
+        query = "SELECT TOP (1000) Fecha_Medicion as fecha_medicion, Altura_Limnimetrica as altura_linimetrica FROM dw.Datos WHERE UTM_Norte = ? AND UTM_Este = ? AND Altura_Limnimetrica IS NOT NULL"
+        params = [utm_norte, utm_este]
+        if fecha_inicio:
+            query += " AND Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            query += " AND Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+        query += " ORDER BY Fecha_Medicion DESC"
+
+        results = execute_query(query, params)
+        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
+
+        altura_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "altura_linimetrica": r.get('altura_linimetrica')} for r in results]
+        return {"utm_norte": utm_norte, "utm_este": utm_este, "total_registros": total_count, "registros_retornados": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get("/puntos/series_de_tiempo/nivel_freatico", tags=["Series Temporales"])
+async def get_nivel_freatico_por_tiempo_por_punto(
+    utm_norte: int = Query(...), utm_este: int = Query(...),
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+):
+    try:
+        # Obtener count (con parámetros seguros)
+        count_query = "SELECT COUNT(*) as total FROM dw.Datos WHERE UTM_Norte = ? AND UTM_Este = ? AND Nivel_Freatico IS NOT NULL"
+        count_params = [utm_norte, utm_este]
+        if fecha_inicio:
+            count_query += " AND Fecha_Medicion >= ?"
+            count_params.append(fecha_inicio)
+        if fecha_fin:
+            count_query += " AND Fecha_Medicion <= ?"
+            count_params.append(fecha_fin)
+            
+        count_result = execute_query(count_query, count_params)
+        total_count = count_result[0]['total'] if count_result else 0
+
+        # Obtener datos (con parámetros seguros)
+        query = "SELECT TOP (1000) Fecha_Medicion as fecha_medicion, Nivel_Freatico as nivel_freatico FROM dw.Datos WHERE UTM_Norte = ? AND UTM_Este = ? AND Nivel_Freatico IS NOT NULL"
+        params = [utm_norte, utm_este]
+        if fecha_inicio:
+            query += " AND Fecha_Medicion >= ?"
+            params.append(fecha_inicio)
+        if fecha_fin:
+            query += " AND Fecha_Medicion <= ?"
+            params.append(fecha_fin)
+        query += " ORDER BY Fecha_Medicion DESC"
+
+        results = execute_query(query, params)
+        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
+
+        nivel_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "nivel_freatico": r.get('nivel_freatico')} for r in results]
+        return {"utm_norte": utm_norte, "utm_este": utm_este, "total_registros": total_count, "registros_retornados": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
+    except HTTPException: raise
+    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
 
 @app.post("/puntos/estadisticas", tags=["Puntos de Medición"])
 async def get_point_statistics(locations: List[UTMLocation]):
@@ -1696,184 +1651,3 @@ async def get_point_statistics(locations: List[UTMLocation]):
     except Exception as e:
         logging.error(f"Error in get_point_statistics: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
-
-@app.get("/puntos/series_de_tiempo/caudal", tags=["Series Temporales"])
-async def get_caudal_por_tiempo_por_punto(
-    utm_norte: int = Query(..., description="Coordenada UTM Norte del punto"),
-    utm_este: int = Query(..., description="Coordenada UTM Este del punto"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
-):
-    """Obtiene el caudal extraído a lo largo del tiempo para un punto UTM específico"""
-    try:
-        time_series_query = """
-        SELECT
-            Fecha_Medicion as fecha_medicion,
-            Caudal as caudal
-        FROM dw.Series_Tiempo
-        WHERE UTM_Norte = ?
-        AND UTM_Este = ?
-        AND Caudal IS NOT NULL
-        ORDER BY Caudal DESC
-        """
-
-        results = execute_query(time_series_query, [utm_norte, utm_este])
-
-        if not results:
-            raise HTTPException(status_code=404, detail="No se encontraron datos de caudal para el punto UTM o período especificado.")
-
-        caudal_por_tiempo = [
-            {
-                "fecha_medicion": r.get('fecha_medicion'),
-                "caudal": r.get('caudal')
-            } for r in results
-        ]
-
-        return {
-            "utm_norte": utm_norte,
-            "utm_este": utm_este,
-            "caudal_por_tiempo": caudal_por_tiempo
-        }
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        logging.error(f"Error in get_caudal_por_tiempo_por_punto: {e}")
-        raise HTTPException(status_code=500, detail={"error": str(e)})
-
-@app.get("/puntos/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"])
-async def get_altura_linimetrica_por_tiempo_por_punto(
-    utm_norte: int = Query(..., description="Coordenada UTM Norte del punto"),
-    utm_este: int = Query(..., description="Coordenada UTM Este del punto"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
-):
-    """Obtiene la altura limnimétrica a lo largo del tiempo para un punto UTM específico"""
-    try:
-        # Build date filters
-        date_filter = ""
-        if fecha_inicio:
-            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
-        if fecha_fin:
-            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
-
-        # Get total count
-        count_query = f"""
-        SELECT COUNT(*) as total
-        FROM dw.Series_Tiempo
-        WHERE UTM_Norte = ?
-          AND UTM_Este = ?
-          AND Altura_Limnimetrica IS NOT NULL
-          {date_filter}
-        """
-
-        count_result = execute_query(count_query, [utm_norte, utm_este])
-        total_count = count_result[0]['total'] if count_result else 0
-
-        # Query time series data for altura limnimétrica
-        time_series_query = f"""
-        SELECT
-            Fecha_Medicion as fecha_medicion,
-            Altura_Limnimetrica as altura_linimetrica
-        FROM dw.Series_Tiempo
-        WHERE UTM_Norte = ?
-          AND UTM_Este = ?
-          AND Altura_Limnimetrica IS NOT NULL
-          {date_filter}
-        ORDER BY Fecha_Medicion DESC
-        """
-
-        results = execute_query(time_series_query, [utm_norte, utm_este])
-
-        if not results:
-            raise HTTPException(status_code=404, detail="No se encontraron datos de altura limnimétrica para el punto UTM o período especificado.")
-
-        altura_por_tiempo = [
-            {
-                "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
-                "altura_linimetrica": r.get('altura_linimetrica')
-            } for r in results
-        ]
-
-        return {
-            "utm_norte": utm_norte,
-            "utm_este": utm_este,
-            "total_registros": total_count,
-            "registros_retornados": len(altura_por_tiempo),
-            "altura_por_tiempo": altura_por_tiempo
-        }
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        logging.error(f"Error in get_altura_linimetrica_por_tiempo_por_punto: {e}")
-        raise HTTPException(status_code=500, detail={"error": str(e)})
-
-@app.get("/puntos/series_de_tiempo/nivel_freatico", tags=["Series Temporales"])
-async def get_nivel_freatico_por_tiempo_por_punto(
-    utm_norte: int = Query(..., description="Coordenada UTM Norte del punto"),
-    utm_este: int = Query(..., description="Coordenada UTM Este del punto"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio (YYYY-MM-DD)"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin (YYYY-MM-DD)")
-):
-    """Obtiene el nivel freático a lo largo del tiempo para un punto UTM específico"""
-    try:
-        # Build date filters
-        date_filter = ""
-        if fecha_inicio:
-            date_filter += f" AND Fecha_Medicion >= '{fecha_inicio}'"
-        if fecha_fin:
-            date_filter += f" AND Fecha_Medicion <= '{fecha_fin}'"
-
-        # Get total count
-        count_query = f"""
-        SELECT COUNT(*) as total
-        FROM dw.Series_Tiempo
-        WHERE UTM_Norte = ?
-          AND UTM_Este = ?
-          AND Nivel_Freatico IS NOT NULL
-          {date_filter}
-        """
-
-        count_result = execute_query(count_query, [utm_norte, utm_este])
-        total_count = count_result[0]['total'] if count_result else 0
-
-        # Query time series data for nivel freático
-        time_series_query = f"""
-        SELECT
-            Fecha_Medicion as fecha_medicion,
-            Nivel_Freatico as nivel_freatico
-        FROM dw.Series_Tiempo
-        WHERE UTM_Norte = ?
-          AND UTM_Este = ?
-          AND Nivel_Freatico IS NOT NULL
-          {date_filter}
-        ORDER BY Fecha_Medicion DESC
-        """
-
-        results = execute_query(time_series_query, [utm_norte, utm_este])
-
-        if not results:
-            raise HTTPException(status_code=404, detail="No se encontraron datos de nivel freático para el punto UTM o período especificado.")
-
-        nivel_por_tiempo = [
-            {
-                "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None,
-                "nivel_freatico": r.get('nivel_freatico')
-            } for r in results
-        ]
-
-        return {
-            "utm_norte": utm_norte,
-            "utm_este": utm_este,
-            "total_registros": total_count,
-            "registros_retornados": len(nivel_por_tiempo),
-            "nivel_por_tiempo": nivel_por_tiempo
-        }
-
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        logging.error(f"Error in get_nivel_freatico_por_tiempo_por_punto: {e}")
-        raise HTTPException(status_code=500, detail={"error": str(e)})
-

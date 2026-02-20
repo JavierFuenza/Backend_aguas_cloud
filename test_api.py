@@ -7,7 +7,7 @@ import pandas as pd
 import random
 
 # --- CONFIGURACIÓN ---
-BASE_URL = "https://aguatrasparenteapi-h2d4gvbcfvcjfycr.eastus2-01.azurewebsites.net/api"  # Asegúrate de que coincida con tu API
+BASE_URL = "http://127.0.0.1:8000/api"  # Asegúrate de que coincida con tu API
 REPORTS_DIR = "reports"
 init(autoreset=True)
 
@@ -151,11 +151,13 @@ def run_tests():
 
     if subcuenca_sample:
         test_endpoint("/cuencas/subcuenca/series_de_tiempo/caudal", params={"cuenca_identificador": subcuenca_sample})
+        test_endpoint("/cuencas/subcuenca/series_de_tiempo/altura_linimetrica", params={"cuenca_identificador": subcuenca_sample}) # Agregado
         test_endpoint("/cuencas/subcuenca/series_de_tiempo/nivel_freatico", params={"cuenca_identificador": subcuenca_sample})
 
     if subsubcuenca_sample:
         test_endpoint("/cuencas/subsubcuenca/series_de_tiempo/caudal", params={"cuenca_identificador": subsubcuenca_sample})
         test_endpoint("/cuencas/subsubcuenca/series_de_tiempo/altura_linimetrica", params={"cuenca_identificador": subsubcuenca_sample})
+        test_endpoint("/cuencas/subsubcuenca/series_de_tiempo/nivel_freatico", params={"cuenca_identificador": subsubcuenca_sample}) # Agregado
 
     # 4. PRUEBAS DE PUNTOS
     print(f"\n{Fore.MAGENTA}--- Puntos de Medición ---{Style.RESET_ALL}")
@@ -172,8 +174,9 @@ def run_tests():
         body = [{"utm_norte": norte, "utm_este": este}]
         test_endpoint("/puntos/estadisticas", method="POST", json_body=body)
 
-    # 5. RENDIMIENTO
+    # 5. RENDIMIENTO Y CACHÉ
     print(f"\n{Fore.MAGENTA}--- Rendimiento ---{Style.RESET_ALL}")
+    test_endpoint("/cache/clear", method="POST") # Agregado
     test_endpoint("/performance/warm-up")
 
     # --- GENERACIÓN DE REPORTE ---
