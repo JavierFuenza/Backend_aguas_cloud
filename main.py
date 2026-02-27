@@ -89,7 +89,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.5.3",
+    version="1.5.4",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -255,6 +255,20 @@ class NivelFreaticoTimeSeriesPoint(BaseModel):
             "example": {
                 "fecha_medicion": "2023-06-15",
                 "nivel_freatico": 15.3
+            }
+        }
+
+class InformanteResponse(BaseModel):
+    nombre_completo: str = Field(..., description="Nombre completo del informante")
+    cantidad_reportes: int = Field(..., description="Cantidad de reportes emitidos por el informante")
+    ultima_fecha_medicion: Optional[str] = Field(None, description="Última fecha de medición del informante")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "nombre_completo": "Juan Perez",
+                "cantidad_reportes": 5,
+                "ultima_fecha_medicion": "2023-10-25 14:30:00"
             }
         }
 
@@ -1650,4 +1664,77 @@ async def get_point_statistics(locations: List[UTMLocation]):
 
     except Exception as e:
         logging.error(f"Error in get_point_statistics: {e}")
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+@app.get(
+    "/informantes",
+    tags=["Informantes"],
+    response_model=List[InformanteResponse],
+    summary="Obtener informantes",
+    description="Obtiene la lista de informantes basándose en filtros como coordenadas UTM, cuenca, subcuenca o subsubcuenca."
+)
+async def get_informantes(
+    utm_norte: Optional[int] = Query(None, description="Coordenada UTM Norte en metros"),
+    utm_este: Optional[int] = Query(None, description="Coordenada UTM Este en metros"),
+    cod_cuenca: Optional[int] = Query(None, description="Código de cuenca"),
+    cod_subcuenca: Optional[int] = Query(None, description="Código de subcuenca"),
+    cod_subsubcuenca: Optional[int] = Query(None, description="Código de subsubcuenca"),
+    limit: Optional[int] = Query(100, description="Número máximo de informantes a retornar")
+):
+    try:
+        logging.info("Consultando informantes con filtros...")
+
+        query = """
+        SELECT
+            NOMB_INF,
+            A_PAT_INF,
+            A_MAT_INF,
+            CANTIDAD_REPORTES,
+            ULTIMA_FECHA_MEDICION
+        FROM dw.Informante
+        WHERE 1=1
+        """
+        params = []
+
+        if utm_norte is not None:
+            query += " AND UTM_NORTE = ?"
+            params.append(utm_norte)
+        if utm_este is not None:
+            query += " AND UTM_ESTE = ?"
+            params.append(utm_este)
+        if cod_cuenca is not None:
+            query += " AND COD_CUENCA = ?"
+            params.append(cod_cuenca)
+        if cod_subcuenca is not None:
+            query += " AND COD_SUBCUENCA = ?"
+            params.append(cod_subcuenca)
+        if cod_subsubcuenca is not None:
+            query += " AND COD_SUBSUBCUENCA = ?"
+            params.append(cod_subsubcuenca)
+            
+        # Apply limit if necessary by wrapping query
+        if limit is not None:
+            query = f"SELECT TOP {limit} * FROM ({query}) as filtered"
+            
+        results = execute_query(query, params)
+        
+        informantes_out = []
+        for r in results:
+            nombre = build_full_name(r.get('NOMB_INF'), r.get('A_PAT_INF'), r.get('A_MAT_INF'))
+            
+            # format date if it exists
+            ultima_fecha = r.get('ULTIMA_FECHA_MEDICION')
+            if ultima_fecha:
+                ultima_fecha = str(ultima_fecha)
+                
+            informantes_out.append({
+                "nombre_completo": nombre,
+                "cantidad_reportes": r.get('CANTIDAD_REPORTES') or 0,
+                "ultima_fecha_medicion": ultima_fecha
+            })
+            
+        return informantes_out
+        
+    except Exception as e:
+        logging.error(f"Error in get_informantes: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
