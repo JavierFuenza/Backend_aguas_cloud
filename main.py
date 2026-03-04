@@ -89,7 +89,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.5.4",
+    version="1.5.5",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -705,7 +705,8 @@ async def get_punto_info(
             UTM_Norte,
             UTM_Este,
             Huso,
-            es_pozo_subterraneo
+            es_pozo_subterraneo,
+            codigo
         FROM dw.Puntos_Mapa
         WHERE UTM_Norte = ?
           AND UTM_Este = ?
@@ -1436,7 +1437,7 @@ async def get_caudal_por_tiempo_por_punto(
 ):
     try:
         query = """
-        SELECT TOP (1000) Fecha_Medicion as fecha_medicion, Caudal as caudal
+        SELECT Fecha_Medicion as fecha_medicion, Caudal as caudal
         FROM dw.Datos
         WHERE UTM_Norte = ? AND UTM_Este = ? AND Caudal IS NOT NULL
         """
@@ -1477,7 +1478,7 @@ async def get_altura_linimetrica_por_tiempo_por_punto(
         total_count = count_result[0]['total'] if count_result else 0
 
         # Obtener datos (con parámetros seguros)
-        query = "SELECT TOP (1000) Fecha_Medicion as fecha_medicion, Altura_Limnimetrica as altura_linimetrica FROM dw.Datos WHERE UTM_Norte = ? AND UTM_Este = ? AND Altura_Limnimetrica IS NOT NULL"
+        query = "SELECT Fecha_Medicion as fecha_medicion, Altura_Limnimetrica as altura_linimetrica FROM dw.Datos WHERE UTM_Norte = ? AND UTM_Este = ? AND Altura_Limnimetrica IS NOT NULL"
         params = [utm_norte, utm_este]
         if fecha_inicio:
             query += " AND Fecha_Medicion >= ?"
@@ -1515,7 +1516,7 @@ async def get_nivel_freatico_por_tiempo_por_punto(
         total_count = count_result[0]['total'] if count_result else 0
 
         # Obtener datos (con parámetros seguros)
-        query = "SELECT TOP (1000) Fecha_Medicion as fecha_medicion, Nivel_Freatico as nivel_freatico FROM dw.Datos WHERE UTM_Norte = ? AND UTM_Este = ? AND Nivel_Freatico IS NOT NULL"
+        query = "SELECT Fecha_Medicion as fecha_medicion, Nivel_Freatico as nivel_freatico FROM dw.Datos WHERE UTM_Norte = ? AND UTM_Este = ? AND Nivel_Freatico IS NOT NULL"
         params = [utm_norte, utm_este]
         if fecha_inicio:
             query += " AND Fecha_Medicion >= ?"
