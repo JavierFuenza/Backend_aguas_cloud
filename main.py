@@ -89,7 +89,7 @@ tags_metadata = [
 app = FastAPI(
     title="Aguas Transparentes API",
     description="API de Recursos Hídricos de Chile. Proporciona acceso a datos de mediciones de caudal, cuencas hidrográficas y series temporales almacenados en Azure Synapse Analytics. Sistema UTM Zona 19S.",
-    version="1.5.5",
+    version="1.6.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -145,6 +145,7 @@ class PuntoInfoResponse(BaseModel):
     utm_este: int
     huso: int
     es_pozo_subterraneo: bool
+    codigo: Optional[str] = Field(None, description="Código de obra del punto")
     cod_cuenca: Optional[int] = None
     cod_subcuenca: Optional[int] = None
     nombre_cuenca: Optional[str] = None
@@ -159,6 +160,7 @@ class PuntoInfoResponse(BaseModel):
                 "utm_este": 350000,
                 "huso": 19,
                 "es_pozo_subterraneo": False,
+                "codigo": "PB-1234",
                 "cod_cuenca": 101,
                 "cod_subcuenca": 10101,
                 "nombre_cuenca": "Río Lluta",
@@ -765,6 +767,7 @@ async def get_punto_info(
             "utm_este": utm_este,
             "huso": punto.get('Huso'),
             "es_pozo_subterraneo": bool(punto.get('es_pozo_subterraneo', 0)),
+            "codigo": punto.get('codigo'),
             "cod_cuenca": cuenca.get('Cod_Cuenca'),
             "cod_subcuenca": cuenca.get('Cod_Subcuenca'),
             "nombre_cuenca": cuenca.get('Nom_Cuenca'),
