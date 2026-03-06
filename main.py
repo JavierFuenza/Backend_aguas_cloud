@@ -1063,10 +1063,8 @@ async def get_caudal_por_tiempo_por_cuenca(
         query += " ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
-        if not results:
-            raise HTTPException(status_code=404, detail="No se encontraron datos.")
 
-        caudal_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "caudal": r["caudal"]} for r in results]
+        caudal_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "caudal": r["caudal"]} for r in results] if results else []
         return {"cuenca_identificador": cuenca_identificador, "total_registros": len(caudal_por_tiempo), "caudal_por_tiempo": caudal_por_tiempo}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
@@ -1102,9 +1100,8 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
         query += " ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
-        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
-
-        altura_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "altura_linimetrica": r["altura_linimetrica"]} for r in results]
+        
+        altura_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "altura_linimetrica": r["altura_linimetrica"]} for r in results] if results else []
         return {"cuenca_identificador": cuenca_identificador, "total_registros": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
@@ -1140,9 +1137,8 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
         query += " ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
-        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
-
-        nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results]
+        
+        nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results] if results else []
         return {"cuenca_identificador": cuenca_identificador, "total_registros": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
@@ -1178,9 +1174,8 @@ async def get_caudal_por_tiempo_por_subcuenca(
         query += " ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
-        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
-
-        caudal_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "caudal": r["caudal"]} for r in results]
+        
+        caudal_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "caudal": r["caudal"]} for r in results] if results else []
         return {"subcuenca_identificador": cuenca_identificador, "total_registros": len(caudal_por_tiempo), "caudal_por_tiempo": caudal_por_tiempo}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
@@ -1287,9 +1282,8 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
         query += " ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
-        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
-
-        nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results]
+        
+        nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results] if results else []
         return {"subcuenca_identificador": cuenca_identificador, "total_registros": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
@@ -1396,9 +1390,8 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
         query += " ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
-        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
-
-        altura_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "altura_linimetrica": r["altura_linimetrica"]} for r in results]
+        
+        altura_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "altura_linimetrica": r["altura_linimetrica"]} for r in results] if results else []
         return {"subsubcuenca_identificador": cuenca_identificador, "total_registros": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
@@ -1434,9 +1427,8 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
         query += " ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
-        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
-
-        nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results]
+        
+        nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results] if results else []
         return {"subsubcuenca_identificador": cuenca_identificador, "total_registros": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
@@ -1462,9 +1454,8 @@ async def get_caudal_por_tiempo_por_punto(
         query += " ORDER BY Fecha_Medicion DESC"
 
         results = execute_query(query, params)
-        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
-
-        caudal_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "caudal": r.get('caudal')} for r in results]
+        
+        caudal_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "caudal": r.get('caudal')} for r in results] if results else []
         return {"utm_norte": utm_norte, "utm_este": utm_este, "total_registros": len(caudal_por_tiempo), "caudal_por_tiempo": caudal_por_tiempo}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
@@ -1500,9 +1491,8 @@ async def get_altura_linimetrica_por_tiempo_por_punto(
         query += " ORDER BY Fecha_Medicion DESC"
 
         results = execute_query(query, params)
-        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
-
-        altura_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "altura_linimetrica": r.get('altura_linimetrica')} for r in results]
+        
+        altura_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "altura_linimetrica": r.get('altura_linimetrica')} for r in results] if results else []
         return {"utm_norte": utm_norte, "utm_este": utm_este, "total_registros": total_count, "registros_retornados": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
@@ -1538,9 +1528,8 @@ async def get_nivel_freatico_por_tiempo_por_punto(
         query += " ORDER BY Fecha_Medicion DESC"
 
         results = execute_query(query, params)
-        if not results: raise HTTPException(status_code=404, detail="No se encontraron datos.")
-
-        nivel_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "nivel_freatico": r.get('nivel_freatico')} for r in results]
+        
+        nivel_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "nivel_freatico": r.get('nivel_freatico')} for r in results] if results else []
         return {"utm_norte": utm_norte, "utm_este": utm_este, "total_registros": total_count, "registros_retornados": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
     except HTTPException: raise
     except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})

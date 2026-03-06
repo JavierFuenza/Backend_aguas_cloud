@@ -7,7 +7,7 @@ import pandas as pd
 import random
 
 # --- CONFIGURACIÓN ---
-BASE_URL = "http://127.0.0.1:8000/api"  # Asegúrate de que coincida con tu API
+BASE_URL = "https://aguatrasparenteapi-h2d4gvbcfvcjfycr.eastus2-01.azurewebsites.net/api"  # Asegúrate de que coincida con tu API
 REPORTS_DIR = "reports"
 init(autoreset=True)
 
