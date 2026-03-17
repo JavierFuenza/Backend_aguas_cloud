@@ -1049,7 +1049,7 @@ async def get_caudal_por_tiempo_por_cuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Caudal AS FLOAT)) AS caudal
+        SELECT d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Caudal AS FLOAT)) AS caudal
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1086,7 +1086,7 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Altura_Limnimetrica AS FLOAT)) AS altura_linimetrica
+        SELECT d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Altura_Limnimetrica AS FLOAT)) AS altura_linimetrica
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1123,7 +1123,7 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Nivel_Freatico AS FLOAT)) AS nivel_freatico
+        SELECT d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Nivel_Freatico AS FLOAT)) AS nivel_freatico
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1160,7 +1160,7 @@ async def get_caudal_por_tiempo_por_subcuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Caudal AS FLOAT)) AS caudal
+        SELECT d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Caudal AS FLOAT)) AS caudal
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1204,7 +1204,7 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
 
         # Consulta unificada optimizada para Azure SQL usando EXISTS
         query = f"""
-        SELECT TOP (1000) 
+        SELECT 
             d.Fecha_Medicion AS fecha_medicion, 
             AVG(CAST(d.Altura_Limnimetrica AS FLOAT)) AS altura_linimetrica
         FROM dw.Datos d
@@ -1268,7 +1268,7 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Nivel_Freatico AS FLOAT)) AS nivel_freatico
+        SELECT d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Nivel_Freatico AS FLOAT)) AS nivel_freatico
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1312,7 +1312,7 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
 
         # Consulta unificada optimizada para Azure SQL usando EXISTS
         query = f"""
-        SELECT TOP (1000) 
+        SELECT 
             d.Fecha_Medicion AS fecha_medicion, 
             AVG(CAST(d.Caudal AS FLOAT)) AS caudal
         FROM dw.Datos d
@@ -1376,7 +1376,7 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Altura_Limnimetrica AS FLOAT)) AS altura_linimetrica
+        SELECT d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Altura_Limnimetrica AS FLOAT)) AS altura_linimetrica
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1413,7 +1413,7 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Nivel_Freatico AS FLOAT)) AS nivel_freatico
+        SELECT d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Nivel_Freatico AS FLOAT)) AS nivel_freatico
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
