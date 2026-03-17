@@ -1038,7 +1038,8 @@ async def get_cuencas_stats(
 async def get_caudal_por_tiempo_por_cuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31")
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31"),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción: True (subterránea), False (superficial)")
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -1063,6 +1064,9 @@ async def get_caudal_por_tiempo_por_cuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
+        if pozo is not None:
+            query += " AND d.es_pozo_subterraneo = ?"
+            params.append(1 if pozo else 0)
         query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
@@ -1075,7 +1079,8 @@ async def get_caudal_por_tiempo_por_cuenca(
 @app.get("/cuencas/cuenca/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"], summary="Serie temporal de altura limnimétrica por cuenca")
 async def get_altura_linimetrica_por_tiempo_por_cuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -1100,6 +1105,9 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
+        if pozo is not None:
+            query += " AND d.es_pozo_subterraneo = ?"
+            params.append(1 if pozo else 0)
         query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
@@ -1112,7 +1120,8 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
 @app.get("/cuencas/cuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"], summary="Serie temporal de nivel freático por cuenca")
 async def get_nivel_freatico_por_tiempo_por_cuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -1137,6 +1146,9 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
+        if pozo is not None:
+            query += " AND d.es_pozo_subterraneo = ?"
+            params.append(1 if pozo else 0)
         query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
@@ -1149,7 +1161,8 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
 @app.get("/cuencas/subcuenca/series_de_tiempo/caudal", tags=["Series Temporales"], summary="Serie temporal de caudal por subcuenca")
 async def get_caudal_por_tiempo_por_subcuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subcuenca", example="205"),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -1174,6 +1187,9 @@ async def get_caudal_por_tiempo_por_subcuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
+        if pozo is not None:
+            query += " AND d.es_pozo_subterraneo = ?"
+            params.append(1 if pozo else 0)
         query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
@@ -1191,7 +1207,8 @@ async def get_caudal_por_tiempo_por_subcuenca(
 async def get_altura_linimetrica_por_tiempo_por_subcuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subcuenca", example="205"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31")
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31"),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
 ):
     try:
         # Determinamos si filtramos por código o por nombre
@@ -1227,6 +1244,10 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
             
+        if pozo is not None:
+            query += " AND d.es_pozo_subterraneo = ?"
+            params.append(1 if pozo else 0)
+            
         query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
@@ -1257,7 +1278,8 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
 @app.get("/cuencas/subcuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"], summary="Serie temporal de nivel freático por subcuenca")
 async def get_nivel_freatico_por_tiempo_por_subcuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subcuenca", example="205"),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -1282,6 +1304,9 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
+        if pozo is not None:
+            query += " AND d.es_pozo_subterraneo = ?"
+            params.append(1 if pozo else 0)
         query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
@@ -1299,7 +1324,8 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
 async def get_caudal_por_tiempo_por_subsubcuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subsubcuenca", example="305"),
     fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31")
+    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31"),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
 ):
     try:
         # Determinamos si filtramos por código o por nombre
@@ -1335,6 +1361,10 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
             
+        if pozo is not None:
+            query += " AND d.es_pozo_subterraneo = ?"
+            params.append(1 if pozo else 0)
+            
         query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
@@ -1365,7 +1395,8 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
 @app.get("/cuencas/subsubcuenca/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"], summary="Serie temporal de altura limnimétrica por subsubcuenca")
 async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subsubcuenca", example="305"),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -1390,6 +1421,9 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
+        if pozo is not None:
+            query += " AND d.es_pozo_subterraneo = ?"
+            params.append(1 if pozo else 0)
         query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
@@ -1402,7 +1436,8 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
 @app.get("/cuencas/subsubcuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"], summary="Serie temporal de nivel freático por subsubcuenca")
 async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
     cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subsubcuenca", example="305"),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -1427,6 +1462,9 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
+        if pozo is not None:
+            query += " AND d.es_pozo_subterraneo = ?"
+            params.append(1 if pozo else 0)
         query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
