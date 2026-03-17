@@ -481,7 +481,8 @@ async def get_puntos_count(
     filtro_null_subcuenca: Optional[bool] = Query(None, description="Si es True, filtra por subcuenca nula"),
     caudal_minimo: Optional[float] = Query(None),
     caudal_maximo: Optional[float] = Query(None),
-    pozo: Optional[bool] = Query(None, description="Filtra por pozo subterráneo")
+    pozo: Optional[bool] = Query(None, description="Filtra por pozo subterráneo"),
+    codigo_obra: Optional[str] = Query(None, description="Buscar por código de obra")
 ):
     """Obtiene el número de puntos únicos desde Puntos_Mapa con filtros"""
     try:
@@ -521,6 +522,10 @@ async def get_puntos_count(
         if pozo is not None:
             count_query += " AND es_pozo_subterraneo = ?"
             query_params.append(1 if pozo else 0)
+
+        if codigo_obra is not None:
+            count_query += " AND codigo LIKE ?"
+            query_params.append(f"%{codigo_obra}%")
 
         logging.info(f"Ejecutando query count: {count_query}")
         results = execute_query(count_query, query_params)
@@ -624,7 +629,8 @@ async def get_puntos(
     caudal_minimo: Optional[float] = Query(None, description="Caudal promedio mínimo (l/s)"),
     caudal_maximo: Optional[float] = Query(None, description="Caudal promedio máximo (l/s)"),
     limit: Optional[int] = Query(120, description="Número máximo de puntos a retornar"),
-    pozo: Optional[bool] = Query(None, description="Filtra por pozo subterráneo")
+    pozo: Optional[bool] = Query(None, description="Filtra por pozo subterráneo"),
+    codigo_obra: Optional[str] = Query(None, description="Buscar por código de obra")
 ):
     """Obtiene puntos desde la tabla pre-agregada Puntos_Mapa con filtros"""
     try:
@@ -669,6 +675,10 @@ async def get_puntos(
         if pozo is not None:
             puntos_query += " AND es_pozo_subterraneo = ?"
             query_params.append(1 if pozo else 0)
+
+        if codigo_obra is not None:
+            puntos_query += " AND codigo LIKE ?"
+            query_params.append(f"%{codigo_obra}%")
 
         # Apply limit
         if limit is not None:
