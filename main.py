@@ -1049,7 +1049,7 @@ async def get_caudal_por_tiempo_por_cuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Caudal AS caudal
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Caudal AS FLOAT)) AS caudal
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1063,7 +1063,7 @@ async def get_caudal_por_tiempo_por_cuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
-        query += " ORDER BY d.Fecha_Medicion DESC"
+        query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
 
@@ -1086,7 +1086,7 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Altura_Limnimetrica AS altura_linimetrica
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Altura_Limnimetrica AS FLOAT)) AS altura_linimetrica
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1100,7 +1100,7 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
-        query += " ORDER BY d.Fecha_Medicion DESC"
+        query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
         
@@ -1123,7 +1123,7 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Nivel_Freatico AS nivel_freatico
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Nivel_Freatico AS FLOAT)) AS nivel_freatico
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1137,7 +1137,7 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
-        query += " ORDER BY d.Fecha_Medicion DESC"
+        query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
         
@@ -1160,7 +1160,7 @@ async def get_caudal_por_tiempo_por_subcuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Caudal AS caudal
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Caudal AS FLOAT)) AS caudal
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1174,7 +1174,7 @@ async def get_caudal_por_tiempo_por_subcuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
-        query += " ORDER BY d.Fecha_Medicion DESC"
+        query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
         
@@ -1206,7 +1206,7 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
         query = f"""
         SELECT TOP (1000) 
             d.Fecha_Medicion AS fecha_medicion, 
-            d.Altura_Limnimetrica AS altura_linimetrica
+            AVG(CAST(d.Altura_Limnimetrica AS FLOAT)) AS altura_linimetrica
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 
@@ -1227,7 +1227,7 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
             
-        query += " ORDER BY d.Fecha_Medicion DESC"
+        query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
 
@@ -1268,7 +1268,7 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Nivel_Freatico AS nivel_freatico
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Nivel_Freatico AS FLOAT)) AS nivel_freatico
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1282,7 +1282,7 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
-        query += " ORDER BY d.Fecha_Medicion DESC"
+        query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
         
@@ -1314,7 +1314,7 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
         query = f"""
         SELECT TOP (1000) 
             d.Fecha_Medicion AS fecha_medicion, 
-            d.Caudal AS caudal
+            AVG(CAST(d.Caudal AS FLOAT)) AS caudal
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 
@@ -1335,7 +1335,7 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
             
-        query += " ORDER BY d.Fecha_Medicion DESC"
+        query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
 
@@ -1376,7 +1376,7 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Altura_Limnimetrica AS altura_linimetrica
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Altura_Limnimetrica AS FLOAT)) AS altura_linimetrica
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1390,7 +1390,7 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
-        query += " ORDER BY d.Fecha_Medicion DESC"
+        query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
         
@@ -1413,7 +1413,7 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
             params = [cuenca_identificador]
 
         query = f"""
-        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, d.Nivel_Freatico AS nivel_freatico
+        SELECT TOP (1000) d.Fecha_Medicion AS fecha_medicion, AVG(CAST(d.Nivel_Freatico AS FLOAT)) AS nivel_freatico
         FROM dw.Datos d
         WHERE EXISTS (
             SELECT 1 FROM dw.Mediciones_full m
@@ -1427,7 +1427,7 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
         if fecha_fin:
             query += " AND d.Fecha_Medicion <= ?"
             params.append(fecha_fin)
-        query += " ORDER BY d.Fecha_Medicion DESC"
+        query += " GROUP BY d.Fecha_Medicion ORDER BY d.Fecha_Medicion DESC"
 
         results = execute_query(query, params)
         
