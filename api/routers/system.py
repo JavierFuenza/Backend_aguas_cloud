@@ -15,7 +15,7 @@ router = APIRouter()
 async def health_check():
     """Health check endpoint with database connectivity test"""
     try:
-        results = await execute_query("SELECT 1 as test")
+        await execute_query("SELECT 1 as test", use_cache=False)
         return {
             "status": "healthy",
             "message": "Water Data API is running",

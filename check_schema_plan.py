@@ -5,7 +5,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-from core.database import execute_query
+from core.database import _execute_query_sync as execute_query
 
 # Columnas que el código actual espera en cada tabla
 EXPECTED = {

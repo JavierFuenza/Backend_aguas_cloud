@@ -1,4 +1,4 @@
-from core.database import execute_query
+from core.database import _execute_query_sync as execute_query
 
 try:
     print("Testing dw.Datos columns...")

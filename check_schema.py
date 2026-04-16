@@ -1,7 +1,7 @@
 import sys
 from core.config import setup_config
 setup_config()
-from core.database import execute_query
+from core.database import _execute_query_sync as execute_query
 
 print("--- TABLES ---")
 try:
