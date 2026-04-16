@@ -1,5 +1,12 @@
 import time
 import pytest
+from core.cache_manager import clear_all_cache
+
+
+@pytest.fixture(autouse=True)
+def reset_cache():
+    yield
+    clear_all_cache()
 
 
 def test_is_cache_valid_uses_custom_ttl():
@@ -15,8 +22,8 @@ def test_is_cache_valid_missing_key():
 
 
 def test_default_ttl_is_300():
-    from core.cache_manager import cache_timestamps, is_cache_valid
-    cache_timestamps["key2"] = time.time() - 290
+    from core.cache_manager import cache_timestamps, is_cache_valid, CACHE_TTL_DEFAULT
+    cache_timestamps["key2"] = time.time() - (CACHE_TTL_DEFAULT - 10)
     assert is_cache_valid("key2") is True
-    cache_timestamps["key2"] = time.time() - 310
+    cache_timestamps["key2"] = time.time() - (CACHE_TTL_DEFAULT + 10)
     assert is_cache_valid("key2") is False

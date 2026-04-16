@@ -5,7 +5,7 @@ import logging
 import pyodbc
 from queue import Queue, Empty
 from typing import List, Dict, Optional
-from core.cache_manager import memory_cache, cache_timestamps, get_cache_key, is_cache_valid
+from core.cache_manager import memory_cache, cache_timestamps, get_cache_key, is_cache_valid, CACHE_TTL_DEFAULT
 
 connection_pool: Optional[Queue] = None
 POOL_SIZE = 10
@@ -49,7 +49,6 @@ def return_db_connection(conn):
 
 
 def _execute_query_sync(query: str, params: List = None, use_cache: bool = True, ttl: int = None) -> List[Dict]:
-    from core.cache_manager import CACHE_TTL_DEFAULT
     effective_ttl = ttl if ttl is not None else CACHE_TTL_DEFAULT
     cache_key = get_cache_key(query, params)
 
@@ -97,5 +96,5 @@ def _execute_query_sync(query: str, params: List = None, use_cache: bool = True,
 async def execute_query(query: str, params: List = None, use_cache: bool = True, ttl: int = None) -> List[Dict]:
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
-        None, _execute_query_sync, query, params, use_cache, ttl
+        None, lambda: _execute_query_sync(query, params=params, use_cache=use_cache, ttl=ttl)
     )
