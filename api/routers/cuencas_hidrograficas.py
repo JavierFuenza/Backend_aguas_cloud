@@ -2,6 +2,7 @@ import logging
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Query
 from core.database import execute_query
+from core.cache_manager import CACHE_TTL_STATIC
 from utils.helpers import safe_round, build_full_name
 from models.schemas import CuencaData, CuencaStatsResponse
 
@@ -30,7 +31,7 @@ async def get_unique_cuencas():
         ORDER BY Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca
         """
 
-        results = await execute_query(cuencas_query)
+        results = await execute_query(cuencas_query, ttl=CACHE_TTL_STATIC)
 
         return {
             "cuencas": [

@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from queue import Queue, Empty
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 # Initialize Config
 from core.config import setup_config
@@ -91,6 +92,7 @@ app.add_middleware(
     allow_headers=["*"],
     max_age=86400
 )
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Include internal routers
 from api.routers import (

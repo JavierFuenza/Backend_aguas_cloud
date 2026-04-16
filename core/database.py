@@ -48,11 +48,13 @@ def return_db_connection(conn):
         conn.close()
 
 
-def _execute_query_sync(query: str, params: List = None, use_cache: bool = True) -> List[Dict]:
+def _execute_query_sync(query: str, params: List = None, use_cache: bool = True, ttl: int = None) -> List[Dict]:
+    from core.cache_manager import CACHE_TTL_DEFAULT
+    effective_ttl = ttl if ttl is not None else CACHE_TTL_DEFAULT
     cache_key = get_cache_key(query, params)
 
     if use_cache:
-        if cache_key in memory_cache and is_cache_valid(cache_key):
+        if cache_key in memory_cache and is_cache_valid(cache_key, ttl=effective_ttl):
             logging.info(f"Cache hit for query: {query[:50]}...")
             return memory_cache[cache_key]
 
@@ -92,8 +94,8 @@ def _execute_query_sync(query: str, params: List = None, use_cache: bool = True)
         return_db_connection(conn)
 
 
-async def execute_query(query: str, params: List = None, use_cache: bool = True) -> List[Dict]:
+async def execute_query(query: str, params: List = None, use_cache: bool = True, ttl: int = None) -> List[Dict]:
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
-        None, _execute_query_sync, query, params, use_cache
+        None, _execute_query_sync, query, params, use_cache, ttl
     )

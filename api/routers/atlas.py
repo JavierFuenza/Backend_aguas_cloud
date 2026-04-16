@@ -2,6 +2,7 @@ import logging
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Query
 from core.database import execute_query
+from core.cache_manager import CACHE_TTL_STATIC
 from utils.helpers import safe_round, build_full_name
 
 router = APIRouter()
@@ -26,7 +27,7 @@ async def get_atlas():
         ORDER BY Region, Provincia, Comuna
         """
 
-        results = await execute_query(atlas_query)
+        results = await execute_query(atlas_query, ttl=CACHE_TTL_STATIC)
 
         return {
             "divisiones": [
