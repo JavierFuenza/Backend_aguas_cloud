@@ -44,15 +44,15 @@ async def warm_up_cache():
 
         # Warm up common queries
         queries = [
-            ("SELECT COUNT(*) as total FROM dw.Mediciones_full", None),
-            ("SELECT COUNT(DISTINCT CONCAT(UTM_Norte, '-', UTM_Este)) as total_puntos_unicos FROM dw.Mediciones_full g WHERE g.UTM_Norte IS NOT NULL AND g.UTM_Este IS NOT NULL", None),
-            ("SELECT DISTINCT Region FROM dw.Mediciones_full WHERE Region IS NOT NULL ORDER BY Region", None),
+            ("SELECT SUM(row_count) as total FROM sys.dm_pdw_nodes_db_partition_stats WHERE object_id = OBJECT_ID('dw.Mediciones_full') AND index_id IN (0,1)", None),
+            ("SELECT COUNT(*) as total_puntos_unicos FROM dw.Puntos_Mapa", None),
+            ("SELECT DISTINCT Region FROM dw.Puntos_Mapa WHERE Region IS NOT NULL ORDER BY Region", None),
         ]
 
         warmed_queries = 0
         for query, params in queries:
             try:
-                execute_query(query, params, use_cache=True)
+                await execute_query(query, params, use_cache=True)
                 warmed_queries += 1
             except Exception as e:
                 logging.error(f"Failed to warm query: {e}")

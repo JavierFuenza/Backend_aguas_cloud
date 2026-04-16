@@ -82,7 +82,7 @@ async def get_puntos_count(
             query_params.append(id_junta)
 
         logging.info(f"Ejecutando query count: {count_query}")
-        results = execute_query(count_query, query_params)
+        results = await execute_query(count_query, query_params)
 
         total_puntos = results[0]['total_puntos_unicos'] if results else 0
 
@@ -207,7 +207,7 @@ async def get_puntos(
             puntos_query = f"SELECT TOP {limit} * FROM ({puntos_query}) AS filtered_puntos"
 
         logging.info(f"Ejecutando query desde Puntos_Mapa: {puntos_query}")
-        puntos = execute_query(puntos_query, query_params)
+        puntos = await execute_query(puntos_query, query_params)
 
         logging.info(f"Se obtuvieron {len(puntos)} puntos desde Puntos_Mapa")
 
@@ -261,7 +261,7 @@ async def get_punto_info(
           AND UTM_Este = ?
         """
 
-        punto_result = execute_query(punto_query, [utm_norte, utm_este])
+        punto_result = await execute_query(punto_query, [utm_norte, utm_este])
 
         if not punto_result:
             raise HTTPException(status_code=404, detail="Punto no encontrado")
@@ -288,7 +288,7 @@ async def get_punto_info(
           AND UTM_Este = ?
         ORDER BY FECHA_MEDICION DESC
         """
-        cuenca_result = execute_query(cuenca_query, [utm_norte, utm_este])
+        cuenca_result = await execute_query(cuenca_query, [utm_norte, utm_este])
         cuenca = cuenca_result[0] if cuenca_result else {}
 
         # Get caudal statistics for this specific point
@@ -303,7 +303,7 @@ async def get_punto_info(
           AND UTM_Este = ?
           AND Caudal IS NOT NULL
         """
-        caudal_result = execute_query(caudal_query, [utm_norte, utm_este])
+        caudal_result = await execute_query(caudal_query, [utm_norte, utm_este])
         caudal_stats = caudal_result[0] if caudal_result else {}
 
         # Build detailed response
@@ -363,7 +363,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
             FROM dw.Datos
             WHERE UTM_Norte = ? AND UTM_Este = ? AND Caudal IS NOT NULL
             """
-            caudal_result = execute_query(caudal_stats_query, [loc.utm_norte, loc.utm_este])
+            caudal_result = await execute_query(caudal_stats_query, [loc.utm_norte, loc.utm_este])
             caudal_stats = caudal_result[0] if caudal_result else {}
 
             # Altura Limnimetrica statistics
@@ -379,7 +379,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
             FROM dw.Datos
             WHERE UTM_Norte = ? AND UTM_Este = ? AND Altura_Limnimetrica IS NOT NULL
             """
-            altura_result = execute_query(altura_stats_query, [loc.utm_norte, loc.utm_este])
+            altura_result = await execute_query(altura_stats_query, [loc.utm_norte, loc.utm_este])
             altura_stats = altura_result[0] if altura_result else {}
 
             # Nivel Freatico statistics
@@ -395,7 +395,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
             FROM dw.Datos
             WHERE UTM_Norte = ? AND UTM_Este = ? AND Nivel_Freatico IS NOT NULL
             """
-            nivel_result = execute_query(nivel_stats_query, [loc.utm_norte, loc.utm_este])
+            nivel_result = await execute_query(nivel_stats_query, [loc.utm_norte, loc.utm_este])
             nivel_stats = nivel_result[0] if nivel_result else {}
 
             response = {
@@ -456,7 +456,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
             AND Caudal IS NOT NULL
             """
 
-            results = execute_query(multi_stats_query)
+            results = await execute_query(multi_stats_query)
             result = results[0] if results else {}
 
             return [{

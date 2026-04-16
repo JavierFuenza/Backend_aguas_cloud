@@ -57,7 +57,7 @@ async def get_informantes(
         if limit is not None:
             query = f"SELECT TOP {limit} * FROM ({query}) as filtered"
             
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
         
         informantes_out = []
         for r in results:

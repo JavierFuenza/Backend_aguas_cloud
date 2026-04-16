@@ -47,7 +47,7 @@ async def get_caudal_por_tiempo_por_cuenca(
             params.append(1 if pozo else 0)
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
 
         caudal_por_tiempo = [{
             "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, 
@@ -95,7 +95,7 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
             params.append(1 if pozo else 0)
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
         
         altura_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "altura_linimetrica": r["altura_linimetrica"]} for r in results] if results else []
         return {"cuenca_identificador": cuenca_identificador, "total_registros": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
@@ -136,7 +136,7 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
             params.append(1 if pozo else 0)
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
         
         nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results] if results else []
         return {"cuenca_identificador": cuenca_identificador, "total_registros": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
@@ -183,7 +183,7 @@ async def get_caudal_por_tiempo_por_subcuenca(
             params.append(1 if pozo else 0)
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
 
         caudal_por_tiempo = [{
             "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, 
@@ -231,7 +231,7 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
             params.append(1 if pozo else 0)
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
         
         altura_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "altura_linimetrica": r["altura_linimetrica"]} for r in results] if results else []
         return {"subcuenca_identificador": cuenca_identificador, "total_registros": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
@@ -272,7 +272,7 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
             params.append(1 if pozo else 0)
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
         
         nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results] if results else []
         return {"subcuenca_identificador": cuenca_identificador, "total_registros": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
@@ -319,7 +319,7 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
             params.append(1 if pozo else 0)
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
 
         caudal_por_tiempo = [{
             "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, 
@@ -367,7 +367,7 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
             params.append(1 if pozo else 0)
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
         
         altura_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "altura_linimetrica": r["altura_linimetrica"]} for r in results] if results else []
         return {"subsubcuenca_identificador": cuenca_identificador, "total_registros": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
@@ -408,7 +408,7 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
             params.append(1 if pozo else 0)
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
         
         nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results] if results else []
         return {"subsubcuenca_identificador": cuenca_identificador, "total_registros": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
@@ -463,7 +463,7 @@ async def get_caudal_por_tiempo_por_shac(
             
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de caudal para el período o SHAC especificado.")
@@ -533,7 +533,7 @@ async def get_altura_linimetrica_por_tiempo_por_shac(
             params.append(1 if pozo else 0)
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de altura limnimétrica para el período o SHAC especificado.")
@@ -600,7 +600,7 @@ async def get_nivel_freatico_por_tiempo_por_shac(
             params.append(1 if pozo else 0)
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
 
         if not results:
             raise HTTPException(status_code=404, detail="No se encontraron datos de nivel freático para el período o SHAC especificado.")
@@ -652,7 +652,7 @@ async def get_caudal_por_tiempo_por_punto(
             params.append(fecha_fin)
         query += " ORDER BY FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
         
         caudal_por_tiempo = [{
             "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, 
@@ -681,7 +681,7 @@ async def get_altura_linimetrica_por_tiempo_por_punto(
             count_query += " AND FECHA_MEDICION <= ?"
             count_params.append(fecha_fin)
             
-        count_result = execute_query(count_query, count_params)
+        count_result = await execute_query(count_query, count_params)
         total_count = count_result[0]['total'] if count_result else 0
 
         query = "SELECT FECHA_MEDICION as fecha_medicion, ALTURA_LIMNIMETRICA as altura_linimetrica FROM dw.Series_tiempo WHERE UTM_NORTE = ? AND UTM_ESTE = ? AND ALTURA_LIMNIMETRICA IS NOT NULL"
@@ -694,7 +694,7 @@ async def get_altura_linimetrica_por_tiempo_por_punto(
             params.append(fecha_fin)
         query += " ORDER BY FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
         
         altura_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "altura_linimetrica": r.get('altura_linimetrica')} for r in results] if results else []
         return {"utm_norte": utm_norte, "utm_este": utm_este, "total_registros": total_count, "registros_retornados": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
@@ -716,7 +716,7 @@ async def get_nivel_freatico_por_tiempo_por_punto(
             count_query += " AND FECHA_MEDICION <= ?"
             count_params.append(fecha_fin)
             
-        count_result = execute_query(count_query, count_params)
+        count_result = await execute_query(count_query, count_params)
         total_count = count_result[0]['total'] if count_result else 0
 
         query = "SELECT FECHA_MEDICION as fecha_medicion, NIVEL_FREATICO as nivel_freatico FROM dw.Series_tiempo WHERE UTM_NORTE = ? AND UTM_ESTE = ? AND NIVEL_FREATICO IS NOT NULL"
@@ -729,7 +729,7 @@ async def get_nivel_freatico_por_tiempo_por_punto(
             params.append(fecha_fin)
         query += " ORDER BY FECHA_MEDICION DESC"
 
-        results = execute_query(query, params)
+        results = await execute_query(query, params)
         
         nivel_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "nivel_freatico": r.get('nivel_freatico')} for r in results] if results else []
         return {"utm_norte": utm_norte, "utm_este": utm_este, "total_registros": total_count, "registros_retornados": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}

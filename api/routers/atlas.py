@@ -26,7 +26,7 @@ async def get_atlas():
         ORDER BY Region, Provincia, Comuna
         """
 
-        results = execute_query(atlas_query)
+        results = await execute_query(atlas_query)
 
         return {
             "divisiones": [

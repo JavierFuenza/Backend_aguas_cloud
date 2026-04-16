@@ -30,7 +30,7 @@ async def get_unique_cuencas():
         ORDER BY Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca
         """
 
-        results = execute_query(cuencas_query)
+        results = await execute_query(cuencas_query)
 
         return {
             "cuencas": [
@@ -69,7 +69,7 @@ async def get_shacs():
         GROUP BY COD_SECTOR_SHA, SECTOR_SHA
         ORDER BY COD_SECTOR_SHA
         """
-        results = execute_query(query)
+        results = await execute_query(query)
         return {
             "shacs": [
                 {
@@ -102,7 +102,7 @@ async def get_juntas():
         GROUP BY ID_JUNTA
         ORDER BY ID_JUNTA
         """
-        results = execute_query(query)
+        results = await execute_query(query)
         return {
             "juntas": [
                 {
@@ -144,7 +144,7 @@ async def get_filtros_reactivos():
             nom_cuenca,
             nom_subcuenca
         """
-        results = execute_query(stats_query)
+        results = await execute_query(stats_query)
 
         # Separate results by nivel
         global_stats = {}
@@ -237,7 +237,7 @@ async def get_cuencas_stats(
         ORDER BY Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca
         """
 
-        results = execute_query(stats_query, params)
+        results = await execute_query(stats_query, params)
 
         if not results:
             return {"estadisticas": []}
@@ -253,7 +253,7 @@ async def get_cuencas_stats(
             FROM dw.Datos
             WHERE Caudal IS NOT NULL
             """
-            global_result = execute_query(global_stats_query)
+            global_result = await execute_query(global_stats_query)
             global_stats = global_result[0] if global_result else {}
 
         # Build response

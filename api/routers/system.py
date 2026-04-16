@@ -15,7 +15,7 @@ router = APIRouter()
 async def health_check():
     """Health check endpoint with database connectivity test"""
     try:
-        results = execute_query("SELECT 1 as test")
+        results = await execute_query("SELECT 1 as test")
         return {
             "status": "healthy",
             "message": "Water Data API is running",
@@ -33,7 +33,10 @@ async def health_check():
 async def test_database_connection():
     """Test database connection with record count"""
     try:
-        results = execute_query("SELECT COUNT(*) as total FROM dw.Mediciones_full")
+        results = await execute_query(
+            "SELECT SUM(row_count) as total FROM sys.dm_pdw_nodes_db_partition_stats "
+            "WHERE object_id = OBJECT_ID('dw.Mediciones_full') AND index_id IN (0,1)"
+        )
         return {
             "status": "success",
             "message": "Database connection successful",
@@ -50,7 +53,10 @@ async def test_database_connection():
 async def get_obras_count():
     """Obtiene el número total de registros en la tabla de mediciones"""
     try:
-        results = execute_query("SELECT COUNT(*) as total FROM dw.Mediciones_full")
+        results = await execute_query(
+            "SELECT SUM(row_count) as total FROM sys.dm_pdw_nodes_db_partition_stats "
+            "WHERE object_id = OBJECT_ID('dw.Mediciones_full') AND index_id IN (0,1)"
+        )
         return {"total_records": results[0]['total']}
     except Exception as e:
         logging.error(f"Error in get_obras_count: {e}")
