@@ -1,17 +1,22 @@
 import requests
 import time
 import os
+import sys
+import argparse
+import subprocess
 from datetime import datetime
 from colorama import init, Fore, Style
 import pandas as pd
 import random
 
 # --- CONFIGURACIÓN ---
-BASE_URL = "http://127.0.0.1:8000/api"  # Asegúrate de que coincida con tu API
-REPORTS_DIR = "reports"
+# NOTA: Cambia BASE_URL a "http://localhost:8000" si estás probando localmente antes de subir a Azure!
+BASE_URL = "http://localhost:8000"  # <- URL LOCAL (Cambiar por Azure en producción)
+REPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "reports")
 init(autoreset=True)
 
 results = []
+current_run_id = 1
 
 def log_result(endpoint, method, status, time_ms, error=None):
     """Registra en memoria y muestra en consola el resultado"""
@@ -27,6 +32,7 @@ def log_result(endpoint, method, status, time_ms, error=None):
 
     # Guardar en la lista de resultados
     results.append({
+        "Run_ID": current_run_id,
         "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "Endpoint": endpoint,
         "Method": method,
@@ -60,17 +66,27 @@ def save_reports(df):
         f.write(f"REPORTE DE EJECUCIÓN API - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write("="*60 + "\n\n")
         f.write(f"Target:       {BASE_URL}\n")
+        f.write(f"Total Runs:   {df['Run_ID'].nunique() if 'Run_ID' in df else 1}\n")
         f.write(f"Total Tests:  {total_count}\n")
         f.write(f"Exitosos:     {success_count}\n")
         f.write(f"Fallidos:     {total_count - success_count}\n")
         f.write(f"Tasa Éxito:   {success_rate:.2f}%\n")
         f.write(f"Latencia Prom:{avg_latency:.2f} ms\n\n")
-        f.write("TOP 5 ENDPOINTS MÁS LENTOS:\n")
+        f.write("RESUMEN POR ENDPOINT:\n")
+        f.write("-" * 30 + "\n")
+        endpoint_stats = df.groupby(["Method", "Endpoint"]).agg(
+            Avg_Time=('Time_ms', 'mean'),
+            Count=('Result', 'count'),
+            Pass_Count=('Result', lambda x: (x == 'PASS').sum())
+        ).reset_index()
+        for _, row in endpoint_stats.iterrows():
+            f.write(f"{row['Method']} {row['Endpoint'][:40].ljust(40)} | Prom: {row['Avg_Time']:.2f}ms | Éxito: {row['Pass_Count']}/{row['Count']}\n")
+        f.write("\nTOP 5 ENDPOINTS MÁS LENTOS:\n")
         f.write("-" * 30 + "\n")
         # Ordenar por tiempo descendente y tomar los top 5
         slowest = df.sort_values(by="Time_ms", ascending=False).head(5)
         for _, row in slowest.iterrows():
-            f.write(f"{row['Time_ms']:.2f} ms | {row['Method']} {row['Endpoint']}\n")
+            f.write(f"{row['Time_ms']:.2f} ms | {row['Method']} {row['Endpoint']} (Run {row.get('Run_ID', 1)})\n")
             
     return csv_filename, txt_filename
 
@@ -101,8 +117,7 @@ def test_endpoint(endpoint, method="GET", params=None, json_body=None):
         return 0, None
 
 def run_tests():
-    print(f"{Fore.YELLOW}=== Iniciando Pruebas de Carga Funcional: Aguas Transparentes API ==={Style.RESET_ALL}")
-    print(f"Target: {BASE_URL}\n")
+    print(f"{Fore.YELLOW}=== RUN {current_run_id} | Iniciando Pruebas: Aguas Transparentes API ==={Style.RESET_ALL}")
 
     # 1. SISTEMA Y HEALTH
     print(f"\n{Fore.MAGENTA}--- Sistema ---{Style.RESET_ALL}")
@@ -159,9 +174,16 @@ def run_tests():
         test_endpoint("/cuencas/subsubcuenca/series_de_tiempo/altura_linimetrica", params={"cuenca_identificador": subsubcuenca_sample})
         test_endpoint("/cuencas/subsubcuenca/series_de_tiempo/nivel_freatico", params={"cuenca_identificador": subsubcuenca_sample}) # Agregado
 
+    # PRUEBAS SHAC
+    print(f"\n{Fore.MAGENTA}--- SHAC ---{Style.RESET_ALL}")
+    test_endpoint("/cuencas/shac/series_de_tiempo/caudal", params={"shac_identificador": "499"})
+
     # 4. PRUEBAS DE PUNTOS
     print(f"\n{Fore.MAGENTA}--- Puntos de Medición ---{Style.RESET_ALL}")
     test_endpoint("/puntos/count", params={"region": 15}) 
+    test_endpoint("/puntos/count", params={"apr": True, "id_junta": 1.0, "shac": 121}) # Filtros nuevos
+    test_endpoint("/puntos/count", params={"id_tipo_extraccion": 2}) # Extracción superficial/subterránea
+    test_endpoint("/puntos/count", params={"search": "obracod123"}) # Búsqueda por obra
     
     if punto_sample:
         norte = punto_sample['utm_norte']
@@ -179,8 +201,8 @@ def run_tests():
     test_endpoint("/cache/clear", method="POST") # Agregado
     test_endpoint("/performance/warm-up")
 
-    # --- GENERACIÓN DE REPORTE ---
-    print(f"\n{Fore.YELLOW}=== Generando Reportes ==={Style.RESET_ALL}")
+def generate_final_report():
+    print(f"\n{Fore.YELLOW}=== Generando Reportes Globales ==={Style.RESET_ALL}")
     if results:
         df = pd.DataFrame(results)
         
@@ -188,6 +210,8 @@ def run_tests():
         avg_latency = df["Time_ms"].mean()
         success_rate = (df[df["Result"] == "PASS"].shape[0] / df.shape[0]) * 100
         
+        print(f"Total Runs:     {df['Run_ID'].nunique()}")
+        print(f"Total Tests:    {df.shape[0]}")
         print(f"Success Rate:   {success_rate:.1f}%")
         print(f"Avg Latency:    {avg_latency:.2f} ms")
         
@@ -200,7 +224,88 @@ def run_tests():
         print(f"{Fore.RED}No se ejecutaron pruebas.{Style.RESET_ALL}")
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Pruebas de Carga Funcional para Aguas Transparentes API")
+    parser.add_argument("--runs", type=int, default=None, help="Número de veces a ejecutar las pruebas")
+    parser.add_argument("--target", type=str, default=None, help="Target API URL")
+    args = parser.parse_args()
+
+    # Preguntar por entorno
+    is_local = True
+    if args.target:
+        BASE_URL = args.target
+        is_local = "localhost" in BASE_URL or "127.0.0.1" in BASE_URL
+    else:
+        env_choice = input("¿Deseas probar el entorno Local (L) o Producción (P)? [L/P]: ").strip().upper()
+        if env_choice == 'P':
+            is_local = False
+            prod_input = input("Ingresa la URL de producción (Ej: https://tu-api.azurewebsites.net): ").strip()
+            BASE_URL = prod_input if prod_input else "https://aguastransparentes.azurewebsites.net"
+        else:
+            is_local = True
+            BASE_URL = "http://127.0.0.1:8000"
+
+    runs = args.runs
+    if runs is None:
+        user_input = input("¿Cuántas veces deseas repetir las pruebas? (Enter para 1): ")
+        try:
+            runs = int(user_input) if user_input.strip() else 1
+        except ValueError:
+            print("Entrada no válida, ejecutando 1 vez por defecto.")
+            runs = 1
+
+    server_process = None
+    if is_local:
+        print(f"\n{Fore.CYAN}Iniciando servidor local automáticamente (uvicorn main:app)...{Style.RESET_ALL}")
+        # Iniciar uvicorn con uv descartando el output para no ensuciar la consola
+        server_process = subprocess.Popen(
+            ["uv", "run", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "8000"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL
+        )
+        
+        print("Esperando a que el servidor local esté listo (máx 30s)...")
+        server_ready = False
+        for _ in range(30):
+            # Verificar si el proceso terminó inesperadamente (ej: puerto ya en uso)
+            if server_process.poll() is not None:
+                print(f"{Fore.RED}Error: Uvicorn se cerró inesperadamente. ¿Quizás el puerto 8000 ya está en uso?{Style.RESET_ALL}")
+                sys.exit(1)
+                
+            try:
+                res = requests.get(f"{BASE_URL}/health")
+                if res.status_code == 200:
+                    server_ready = True
+                    break
+            except requests.exceptions.ConnectionError:
+                pass
+            time.sleep(1)
+                
+        if not server_ready:
+            print(f"{Fore.RED}Error: El servidor local no se inició a tiempo.{Style.RESET_ALL}")
+            if server_process:
+                server_process.terminate()
+            sys.exit(1)
+        print(f"{Fore.GREEN}Servidor local iniciado correctamente.{Style.RESET_ALL}\n")
+
+    print(f"{Fore.YELLOW}=== Iniciando Pruebas de Carga Funcional: Aguas Transparentes API ==={Style.RESET_ALL}")
+    print(f"Target: {BASE_URL}")
+    print(f"Repeticiones: {runs}\n")
+
     try:
-        run_tests()
+        for i in range(1, runs + 1):
+            current_run_id = i
+            run_tests()
+            if i < runs:
+                time.sleep(1) # Pequeña pausa entre corridas
+        generate_final_report()
     except requests.exceptions.ConnectionError:
         print(f"{Fore.RED}ERROR CRÍTICO: No se pudo conectar a {BASE_URL}. Asegúrate de que la API esté corriendo.{Style.RESET_ALL}")
+    except KeyboardInterrupt:
+        print(f"\n{Fore.YELLOW}Pruebas interrumpidas por el usuario. Generando reporte parcial...{Style.RESET_ALL}")
+        generate_final_report()
+    finally:
+        if server_process:
+            print(f"\n{Fore.CYAN}Apagando servidor local...{Style.RESET_ALL}")
+            server_process.terminate()
+            server_process.wait()
+            print(f"{Fore.GREEN}Servidor apagado.{Style.RESET_ALL}")
