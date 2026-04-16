@@ -37,10 +37,16 @@ async def test_database_connection():
             "SELECT SUM(row_count) as total FROM sys.dm_db_partition_stats "
             "WHERE object_id = OBJECT_ID('dw.Mediciones_full') AND index_id IN (0,1)"
         )
+        total = results[0]['total'] if results and results[0]['total'] is not None else None
+        if total is None:
+            raise HTTPException(status_code=503, detail={
+                "status": "error",
+                "message": "Table dw.Mediciones_full not found or has no rows"
+            })
         return {
             "status": "success",
             "message": "Database connection successful",
-            "total_records": results[0]['total']
+            "total_records": total
         }
     except Exception as e:
         logging.error(f"Database connection failed: {str(e)}")
@@ -57,7 +63,10 @@ async def get_obras_count():
             "SELECT SUM(row_count) as total FROM sys.dm_db_partition_stats "
             "WHERE object_id = OBJECT_ID('dw.Mediciones_full') AND index_id IN (0,1)"
         )
-        return {"total_records": results[0]['total']}
+        total = results[0]['total'] if results and results[0]['total'] is not None else None
+        if total is None:
+            raise HTTPException(status_code=503, detail={"error": "Table dw.Mediciones_full not found or has no rows"})
+        return {"total_records": total}
     except Exception as e:
         logging.error(f"Error in get_obras_count: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
