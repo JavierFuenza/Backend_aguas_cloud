@@ -49,3 +49,4 @@ async def test_execute_query_retries_on_dead_connection():
         result = await execute_query("SELECT 1", use_cache=False)
 
     assert result == [{"val": 1}]
+    dead_conn.close.assert_called_once()

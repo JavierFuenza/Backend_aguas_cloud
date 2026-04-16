@@ -5,13 +5,10 @@ import logging
 import pyodbc
 from queue import Queue, Empty
 from typing import List, Dict, Optional
-import threading
-
 from core.cache_manager import memory_cache, cache_timestamps, get_cache_key, is_cache_valid
 
 connection_pool: Optional[Queue] = None
 POOL_SIZE = 10
-pool_lock = threading.Lock()
 
 
 def create_db_connection():
@@ -52,8 +49,9 @@ def return_db_connection(conn):
 
 
 def _execute_query_sync(query: str, params: List = None, use_cache: bool = True) -> List[Dict]:
+    cache_key = get_cache_key(query, params)
+
     if use_cache:
-        cache_key = get_cache_key(query, params)
         if cache_key in memory_cache and is_cache_valid(cache_key):
             logging.info(f"Cache hit for query: {query[:50]}...")
             return memory_cache[cache_key]
@@ -80,12 +78,12 @@ def _execute_query_sync(query: str, params: List = None, use_cache: bool = True)
         columns = [col[0] for col in cursor.description]
         results = cursor.fetchall()
         result_list = [dict(zip(columns, row)) for row in results]
+        cursor.close()
 
         execution_time = time.time() - start_time
         logging.info(f"Query executed in {execution_time:.3f}s, returned {len(result_list)} rows")
 
         if use_cache and result_list:
-            cache_key = get_cache_key(query, params)
             memory_cache[cache_key] = result_list
             cache_timestamps[cache_key] = time.time()
 
@@ -95,7 +93,7 @@ def _execute_query_sync(query: str, params: List = None, use_cache: bool = True)
 
 
 async def execute_query(query: str, params: List = None, use_cache: bool = True) -> List[Dict]:
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(
         None, _execute_query_sync, query, params, use_cache
     )
