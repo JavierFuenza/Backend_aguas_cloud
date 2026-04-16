@@ -248,14 +248,28 @@ async def get_punto_info(
     try:
         logging.info(f"Obteniendo info detallada para punto: UTM_Norte={utm_norte}, UTM_Este={utm_este}")
 
-        # Get basic geographic info for the point from Puntos_Mapa
+        # Single query against pre-aggregated Puntos_Mapa — avoids full scan of Mediciones_full
         punto_query = """
         SELECT
             UTM_Norte,
             UTM_Este,
             Huso,
             es_pozo_subterraneo,
-            codigo
+            codigo,
+            Cod_Cuenca,
+            Nom_Cuenca,
+            Cod_Subcuenca,
+            Nom_Subcuenca,
+            Cod_Subsubcuenca,
+            Nom_Subsubcuenca,
+            SECTOR_SHA,
+            APR,
+            ID_JUNTA,
+            PARTE_JUNTA,
+            REPRESENTA_JUNTA,
+            CANAL_TRANSMISION,
+            caudal_promedio,
+            n_mediciones
         FROM dw.Puntos_Mapa
         WHERE UTM_Norte = ?
           AND UTM_Este = ?
@@ -266,67 +280,29 @@ async def get_punto_info(
         if not punto_result:
             raise HTTPException(status_code=404, detail="Punto no encontrado")
 
-        punto = punto_result[0]
-
-        # Get cuenca and last dynamic info based on UTM coordinates
-        cuenca_query = """
-        SELECT TOP 1
-            Cod_Cuenca,
-            Nom_Cuenca,
-            Cod_Subcuenca,
-            Nom_Subcuenca,
-            Cod_Subsubcuenca,
-            Nom_Subsubcuenca,
-            SECTOR_SHA, 
-            APR, 
-            ID_JUNTA, 
-            PARTE_JUNTA, 
-            REPRESENTA_JUNTA, 
-            CANAL_TRANSMISION
-        FROM dw.Mediciones_full
-        WHERE UTM_Norte = ?
-          AND UTM_Este = ?
-        ORDER BY FECHA_MEDICION DESC
-        """
-        cuenca_result = await execute_query(cuenca_query, [utm_norte, utm_este])
-        cuenca = cuenca_result[0] if cuenca_result else {}
-
-        # Get caudal statistics for this specific point
-        caudal_query = """
-        SELECT
-            AVG(CAST(Caudal AS FLOAT)) as caudal_promedio,
-            MIN(CAST(Caudal AS FLOAT)) as caudal_minimo,
-            MAX(CAST(Caudal AS FLOAT)) as caudal_maximo,
-            COUNT(*) as n_mediciones
-        FROM dw.Datos
-        WHERE UTM_Norte = ?
-          AND UTM_Este = ?
-          AND Caudal IS NOT NULL
-        """
-        caudal_result = await execute_query(caudal_query, [utm_norte, utm_este])
-        caudal_stats = caudal_result[0] if caudal_result else {}
+        p = punto_result[0]
 
         # Build detailed response
         response = {
             "utm_norte": utm_norte,
             "utm_este": utm_este,
-            "huso": punto.get('Huso'),
-            "es_pozo_subterraneo": bool(punto.get('es_pozo_subterraneo', 0)),
-            "codigo": punto.get('codigo'),
-            "cod_cuenca": cuenca.get('Cod_Cuenca'),
-            "cod_subcuenca": cuenca.get('Cod_Subcuenca'),
-            "cod_subsubcuenca": cuenca.get('Cod_Subsubcuenca'),
-            "nombre_cuenca": cuenca.get('Nom_Cuenca'),
-            "nombre_subcuenca": cuenca.get('Nom_Subcuenca'),
-            "nombre_subsubcuenca": cuenca.get('Nom_Subsubcuenca'),
-            "caudal_promedio": safe_round(caudal_stats.get('caudal_promedio')),
-            "n_mediciones": caudal_stats.get('n_mediciones', 0),
-            "sector_sha": cuenca.get('SECTOR_SHA'),
-            "apr": bool(cuenca.get('APR', 0)) if cuenca.get('APR') is not None else None,
-            "id_junta": cuenca.get('ID_JUNTA'),
-            "parte_junta": bool(cuenca.get('PARTE_JUNTA', 0)) if cuenca.get('PARTE_JUNTA') is not None else None,
-            "representa_junta": bool(cuenca.get('REPRESENTA_JUNTA', 0)) if cuenca.get('REPRESENTA_JUNTA') is not None else None,
-            "canal_transmision": cuenca.get('CANAL_TRANSMISION')
+            "huso": p.get('Huso'),
+            "es_pozo_subterraneo": bool(p.get('es_pozo_subterraneo', 0)),
+            "codigo": p.get('codigo'),
+            "cod_cuenca": p.get('Cod_Cuenca'),
+            "cod_subcuenca": p.get('Cod_Subcuenca'),
+            "cod_subsubcuenca": p.get('Cod_Subsubcuenca'),
+            "nombre_cuenca": p.get('Nom_Cuenca'),
+            "nombre_subcuenca": p.get('Nom_Subcuenca'),
+            "nombre_subsubcuenca": p.get('Nom_Subsubcuenca'),
+            "caudal_promedio": safe_round(p.get('caudal_promedio')),
+            "n_mediciones": p.get('n_mediciones') or 0,
+            "sector_sha": p.get('SECTOR_SHA'),
+            "apr": bool(p.get('APR', 0)) if p.get('APR') is not None else None,
+            "id_junta": p.get('ID_JUNTA'),
+            "parte_junta": bool(p.get('PARTE_JUNTA', 0)) if p.get('PARTE_JUNTA') is not None else None,
+            "representa_junta": bool(p.get('REPRESENTA_JUNTA', 0)) if p.get('REPRESENTA_JUNTA') is not None else None,
+            "canal_transmision": p.get('CANAL_TRANSMISION')
         }
 
         logging.info(f"Info detallada obtenida para punto {utm_norte}/{utm_este}")
