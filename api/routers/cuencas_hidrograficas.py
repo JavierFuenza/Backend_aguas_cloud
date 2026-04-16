@@ -248,11 +248,11 @@ async def get_cuencas_stats(
         if include_global:
             global_stats_query = """
             SELECT
-                AVG(CAST(Caudal AS FLOAT)) as global_promedio,
-                MIN(CAST(Caudal AS FLOAT)) as global_minimo,
-                MAX(CAST(Caudal AS FLOAT)) as global_maximo
-            FROM dw.Datos
-            WHERE Caudal IS NOT NULL
+                AVG(CAST(caudal_promedio AS FLOAT)) as global_promedio,
+                MIN(caudal_minimo) as global_minimo,
+                MAX(caudal_maximo) as global_maximo
+            FROM dw.Cuenca_Stats
+            WHERE caudal_promedio IS NOT NULL
             """
             global_result = await execute_query(global_stats_query)
             global_stats = global_result[0] if global_result else {}

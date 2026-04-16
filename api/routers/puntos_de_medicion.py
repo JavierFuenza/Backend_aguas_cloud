@@ -330,14 +330,14 @@ async def get_point_statistics(locations: List[UTMLocation]):
             caudal_stats_query = """
             SELECT
                 COUNT(*) as count,
-                AVG(CAST(Caudal AS FLOAT)) as avg_val,
-                MIN(CAST(Caudal AS FLOAT)) as min_val,
-                MAX(CAST(Caudal AS FLOAT)) as max_val,
-                STDEV(CAST(Caudal AS FLOAT)) as std_val,
-                MIN(Fecha_Medicion) as primera_fecha,
-                MAX(Fecha_Medicion) as ultima_fecha
-            FROM dw.Datos
-            WHERE UTM_Norte = ? AND UTM_Este = ? AND Caudal IS NOT NULL
+                AVG(CAST(CAUDAL AS FLOAT)) as avg_val,
+                MIN(CAST(CAUDAL AS FLOAT)) as min_val,
+                MAX(CAST(CAUDAL AS FLOAT)) as max_val,
+                STDEV(CAST(CAUDAL AS FLOAT)) as std_val,
+                MIN(FECHA_MEDICION) as primera_fecha,
+                MAX(FECHA_MEDICION) as ultima_fecha
+            FROM dw.Series_Tiempo
+            WHERE UTM_NORTE = ? AND UTM_ESTE = ? AND CAUDAL IS NOT NULL
             """
             caudal_result = await execute_query(caudal_stats_query, [loc.utm_norte, loc.utm_este])
             caudal_stats = caudal_result[0] if caudal_result else {}
@@ -346,14 +346,14 @@ async def get_point_statistics(locations: List[UTMLocation]):
             altura_stats_query = """
             SELECT
                 COUNT(*) as count,
-                AVG(CAST(Altura_Limnimetrica AS FLOAT)) as avg_val,
-                MIN(CAST(Altura_Limnimetrica AS FLOAT)) as min_val,
-                MAX(CAST(Altura_Limnimetrica AS FLOAT)) as max_val,
-                STDEV(CAST(Altura_Limnimetrica AS FLOAT)) as std_val,
-                MIN(Fecha_Medicion) as primera_fecha,
-                MAX(Fecha_Medicion) as ultima_fecha
-            FROM dw.Datos
-            WHERE UTM_Norte = ? AND UTM_Este = ? AND Altura_Limnimetrica IS NOT NULL
+                AVG(CAST(ALTURA_LIMNIMETRICA AS FLOAT)) as avg_val,
+                MIN(CAST(ALTURA_LIMNIMETRICA AS FLOAT)) as min_val,
+                MAX(CAST(ALTURA_LIMNIMETRICA AS FLOAT)) as max_val,
+                STDEV(CAST(ALTURA_LIMNIMETRICA AS FLOAT)) as std_val,
+                MIN(FECHA_MEDICION) as primera_fecha,
+                MAX(FECHA_MEDICION) as ultima_fecha
+            FROM dw.Series_Tiempo
+            WHERE UTM_NORTE = ? AND UTM_ESTE = ? AND ALTURA_LIMNIMETRICA IS NOT NULL
             """
             altura_result = await execute_query(altura_stats_query, [loc.utm_norte, loc.utm_este])
             altura_stats = altura_result[0] if altura_result else {}
@@ -362,14 +362,14 @@ async def get_point_statistics(locations: List[UTMLocation]):
             nivel_stats_query = """
             SELECT
                 COUNT(*) as count,
-                AVG(CAST(Nivel_Freatico AS FLOAT)) as avg_val,
-                MIN(CAST(Nivel_Freatico AS FLOAT)) as min_val,
-                MAX(CAST(Nivel_Freatico AS FLOAT)) as max_val,
-                STDEV(CAST(Nivel_Freatico AS FLOAT)) as std_val,
-                MIN(Fecha_Medicion) as primera_fecha,
-                MAX(Fecha_Medicion) as ultima_fecha
-            FROM dw.Datos
-            WHERE UTM_Norte = ? AND UTM_Este = ? AND Nivel_Freatico IS NOT NULL
+                AVG(CAST(NIVEL_FREATICO AS FLOAT)) as avg_val,
+                MIN(CAST(NIVEL_FREATICO AS FLOAT)) as min_val,
+                MAX(CAST(NIVEL_FREATICO AS FLOAT)) as max_val,
+                STDEV(CAST(NIVEL_FREATICO AS FLOAT)) as std_val,
+                MIN(FECHA_MEDICION) as primera_fecha,
+                MAX(FECHA_MEDICION) as ultima_fecha
+            FROM dw.Series_Tiempo
+            WHERE UTM_NORTE = ? AND UTM_ESTE = ? AND NIVEL_FREATICO IS NOT NULL
             """
             nivel_result = await execute_query(nivel_stats_query, [loc.utm_norte, loc.utm_este])
             nivel_stats = nivel_result[0] if nivel_result else {}
@@ -423,13 +423,13 @@ async def get_point_statistics(locations: List[UTMLocation]):
             multi_stats_query = f"""
             SELECT
                 COUNT(*) as count,
-                AVG(CAST(Caudal AS FLOAT)) as avg_caudal,
-                MIN(CAST(Caudal AS FLOAT)) as min_caudal,
-                MAX(CAST(Caudal AS FLOAT)) as max_caudal,
-                STDEV(CAST(Caudal AS FLOAT)) as std_caudal
-            FROM dw.Datos
+                AVG(CAST(CAUDAL AS FLOAT)) as avg_caudal,
+                MIN(CAST(CAUDAL AS FLOAT)) as min_caudal,
+                MAX(CAST(CAUDAL AS FLOAT)) as max_caudal,
+                STDEV(CAST(CAUDAL AS FLOAT)) as std_caudal
+            FROM dw.Series_Tiempo
             WHERE ({coords_conditions})
-            AND Caudal IS NOT NULL
+            AND CAUDAL IS NOT NULL
             """
 
             results = await execute_query(multi_stats_query)
