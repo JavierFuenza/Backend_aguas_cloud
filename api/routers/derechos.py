@@ -1,6 +1,5 @@
 # Backend_aguas_cloud/api/routers/derechos.py
 import logging
-from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from core.database import execute_query
 
@@ -41,8 +40,8 @@ async def get_punto_derechos(
     try:
         rows = await execute_query(query, params=[utm_norte, utm_este], use_cache=False)
     except Exception as e:
-        logging.error(f"Error get_punto_derechos: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.error(f"Error get_punto_derechos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error": str(e)})
 
     if not rows:
         raise HTTPException(status_code=404, detail="No se encontraron derechos para este punto")
@@ -93,8 +92,8 @@ async def get_cuenca_derechos(
     try:
         rows = await execute_query(query, params=[cod_cuenca], use_cache=False)
     except Exception as e:
-        logging.error(f"Error get_cuenca_derechos: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.error(f"Error get_cuenca_derechos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error": str(e)})
 
     if not rows or rows[0].get("puntos_con_derechos") == 0:
         return {"puntos_con_derechos": 0, "volumen_anual_total": 0, "caudal_mensual_suma": {m: 0 for m in MESES}}
@@ -123,8 +122,8 @@ async def get_subcuenca_derechos(
     try:
         rows = await execute_query(query, params=[cod_cuenca, cod_subcuenca], use_cache=False)
     except Exception as e:
-        logging.error(f"Error get_subcuenca_derechos: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.error(f"Error get_subcuenca_derechos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail={"error": str(e)})
 
     if not rows or rows[0].get("puntos_con_derechos") == 0:
         return {"puntos_con_derechos": 0, "volumen_anual_total": 0, "caudal_mensual_suma": {m: 0 for m in MESES}}
