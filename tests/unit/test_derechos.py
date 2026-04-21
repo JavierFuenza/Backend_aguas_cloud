@@ -82,3 +82,24 @@ async def test_tipo_derecho_unknown_label():
         result = await get_punto_derechos(utm_norte=1, utm_este=1)
 
     assert result["tipo_derecho_label"] == "Desconocido"
+
+
+@pytest.mark.asyncio
+async def test_get_subcuenca_derechos_aggregates():
+    mock_row = {
+        "puntos_con_derechos": 3,
+        "volumen_anual_total": 500000,
+        "CAUDAL_ENERO": 25.0, "CAUDAL_FEBRERO": 25.0, "CAUDAL_MARZO": 25.0,
+        "CAUDAL_ABRIL": 20.0, "CAUDAL_MAYO": 15.0, "CAUDAL_JUNIO": 10.0,
+        "CAUDAL_JULIO": 10.0, "CAUDAL_AGOSTO": 12.0, "CAUDAL_SEPTIEMBRE": 17.0,
+        "CAUDAL_OCTUBRE": 20.0, "CAUDAL_NOVIEMBRE": 22.0, "CAUDAL_DICIEMBRE": 25.0,
+    }
+
+    with patch("api.routers.derechos.execute_query", return_value=[mock_row]):
+        from api.routers.derechos import get_subcuenca_derechos
+        result = await get_subcuenca_derechos(cod_cuenca=401, cod_subcuenca=4011)
+
+    assert result["puntos_con_derechos"] == 3
+    assert result["volumen_anual_total"] == 500000
+    assert result["caudal_mensual_suma"]["enero"] == 25.0
+    assert result["caudal_mensual_suma"]["junio"] == 10.0
