@@ -1,25 +1,28 @@
 -- Migration: add water rights columns to pre-aggregated tables
--- Run once against the database, then update ETL to include these columns on rebuild.
+-- Safe to re-run: ALTER is skipped if columns already exist (e.g. pipeline already rebuilt).
 
 -- ============================================================
 -- 1. dw.Puntos_Mapa — one row per unique (UTM_Norte, UTM_Este)
 -- ============================================================
 
-ALTER TABLE dw.Puntos_Mapa ADD
-    TIPO_DERECHO       INT          NULL,
-    VOLUMEN_ANUAL      FLOAT        NULL,
-    CAUDAL_ENERO       FLOAT        NULL,
-    CAUDAL_FEBRERO     FLOAT        NULL,
-    CAUDAL_MARZO       FLOAT        NULL,
-    CAUDAL_ABRIL       FLOAT        NULL,
-    CAUDAL_MAYO        FLOAT        NULL,
-    CAUDAL_JUNIO       FLOAT        NULL,
-    CAUDAL_JULIO       FLOAT        NULL,
-    CAUDAL_AGOSTO      FLOAT        NULL,
-    CAUDAL_SEPTIEMBRE  FLOAT        NULL,
-    CAUDAL_OCTUBRE     FLOAT        NULL,
-    CAUDAL_NOVIEMBRE   FLOAT        NULL,
-    CAUDAL_DICIEMBRE   FLOAT        NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dw.Puntos_Mapa') AND name = 'TIPO_DERECHO')
+BEGIN
+    ALTER TABLE dw.Puntos_Mapa ADD
+        TIPO_DERECHO       INT          NULL,
+        VOLUMEN_ANUAL      FLOAT        NULL,
+        CAUDAL_ENERO       FLOAT        NULL,
+        CAUDAL_FEBRERO     FLOAT        NULL,
+        CAUDAL_MARZO       FLOAT        NULL,
+        CAUDAL_ABRIL       FLOAT        NULL,
+        CAUDAL_MAYO        FLOAT        NULL,
+        CAUDAL_JUNIO       FLOAT        NULL,
+        CAUDAL_JULIO       FLOAT        NULL,
+        CAUDAL_AGOSTO      FLOAT        NULL,
+        CAUDAL_SEPTIEMBRE  FLOAT        NULL,
+        CAUDAL_OCTUBRE     FLOAT        NULL,
+        CAUDAL_NOVIEMBRE   FLOAT        NULL,
+        CAUDAL_DICIEMBRE   FLOAT        NULL;
+END
 GO
 
 -- Populate from Mediciones_full (deduplicate points with MAX)
@@ -67,21 +70,24 @@ GO
 -- 2. dw.Cuenca_Stats — one row per (Cod_Cuenca, Cod_Subcuenca, Cod_Subsubcuenca)
 -- ============================================================
 
-ALTER TABLE dw.Cuenca_Stats ADD
-    puntos_con_derechos    INT    NULL,
-    volumen_anual_total    FLOAT  NULL,
-    caudal_enero_sum       FLOAT  NULL,
-    caudal_febrero_sum     FLOAT  NULL,
-    caudal_marzo_sum       FLOAT  NULL,
-    caudal_abril_sum       FLOAT  NULL,
-    caudal_mayo_sum        FLOAT  NULL,
-    caudal_junio_sum       FLOAT  NULL,
-    caudal_julio_sum       FLOAT  NULL,
-    caudal_agosto_sum      FLOAT  NULL,
-    caudal_septiembre_sum  FLOAT  NULL,
-    caudal_octubre_sum     FLOAT  NULL,
-    caudal_noviembre_sum   FLOAT  NULL,
-    caudal_diciembre_sum   FLOAT  NULL;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('dw.Cuenca_Stats') AND name = 'puntos_con_derechos')
+BEGIN
+    ALTER TABLE dw.Cuenca_Stats ADD
+        puntos_con_derechos    INT    NULL,
+        volumen_anual_total    FLOAT  NULL,
+        caudal_enero_sum       FLOAT  NULL,
+        caudal_febrero_sum     FLOAT  NULL,
+        caudal_marzo_sum       FLOAT  NULL,
+        caudal_abril_sum       FLOAT  NULL,
+        caudal_mayo_sum        FLOAT  NULL,
+        caudal_junio_sum       FLOAT  NULL,
+        caudal_julio_sum       FLOAT  NULL,
+        caudal_agosto_sum      FLOAT  NULL,
+        caudal_septiembre_sum  FLOAT  NULL,
+        caudal_octubre_sum     FLOAT  NULL,
+        caudal_noviembre_sum   FLOAT  NULL,
+        caudal_diciembre_sum   FLOAT  NULL;
+END
 GO
 
 -- Populate: aggregate unique points per (cuenca, subcuenca, subsubcuenca)
@@ -104,7 +110,7 @@ SET
 FROM dw.Cuenca_Stats cs
 INNER JOIN (
     SELECT
-        COD_CUENCA, COD_SUBCUENCA, COD_SUBSUBCUENCA,
+        COD_CUENCA, COD_SUBCUENCA, COD_SUBSUBCUENCA, REGION,
         COUNT(*)               AS puntos_con_derechos,
         SUM(VOLUMEN_ANUAL)     AS volumen_anual_total,
         SUM(CAUDAL_ENERO)      AS caudal_enero_sum,
@@ -120,9 +126,8 @@ INNER JOIN (
         SUM(CAUDAL_NOVIEMBRE)  AS caudal_noviembre_sum,
         SUM(CAUDAL_DICIEMBRE)  AS caudal_diciembre_sum
     FROM (
-        -- deduplicate points within each subsubcuenca first
         SELECT
-            COD_CUENCA, COD_SUBCUENCA, COD_SUBSUBCUENCA,
+            COD_CUENCA, COD_SUBCUENCA, COD_SUBSUBCUENCA, REGION,
             UTM_NORTE, UTM_ESTE,
             MAX(VOLUMEN_ANUAL)     AS VOLUMEN_ANUAL,
             MAX(CAUDAL_ENERO)      AS CAUDAL_ENERO,
@@ -139,10 +144,11 @@ INNER JOIN (
             MAX(CAUDAL_DICIEMBRE)  AS CAUDAL_DICIEMBRE
         FROM dw.Mediciones_full
         WHERE TIPO_DERECHO IS NOT NULL
-        GROUP BY COD_CUENCA, COD_SUBCUENCA, COD_SUBSUBCUENCA, UTM_NORTE, UTM_ESTE
+        GROUP BY COD_CUENCA, COD_SUBCUENCA, COD_SUBSUBCUENCA, REGION, UTM_NORTE, UTM_ESTE
     ) AS pts_unicos
-    GROUP BY COD_CUENCA, COD_SUBCUENCA, COD_SUBSUBCUENCA
+    GROUP BY COD_CUENCA, COD_SUBCUENCA, COD_SUBSUBCUENCA, REGION
 ) AS src ON cs.Cod_Cuenca        = src.COD_CUENCA
         AND cs.Cod_Subcuenca     = src.COD_SUBCUENCA
-        AND cs.Cod_Subsubcuenca  = src.COD_SUBSUBCUENCA;
+        AND cs.Cod_Subsubcuenca  = src.COD_SUBSUBCUENCA
+        AND cs.Cod_Region        = src.REGION;
 GO
