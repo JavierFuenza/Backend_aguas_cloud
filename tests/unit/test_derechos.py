@@ -42,10 +42,10 @@ async def test_get_cuenca_derechos_aggregates():
     mock_row = {
         "puntos_con_derechos": 5,
         "volumen_anual_total": 1000000,
-        "CAUDAL_ENERO": 50.0, "CAUDAL_FEBRERO": 50.0, "CAUDAL_MARZO": 50.0,
-        "CAUDAL_ABRIL": 40.0, "CAUDAL_MAYO": 30.0, "CAUDAL_JUNIO": 20.0,
-        "CAUDAL_JULIO": 20.0, "CAUDAL_AGOSTO": 25.0, "CAUDAL_SEPTIEMBRE": 35.0,
-        "CAUDAL_OCTUBRE": 40.0, "CAUDAL_NOVIEMBRE": 45.0, "CAUDAL_DICIEMBRE": 50.0,
+        "caudal_enero_sum": 50.0, "caudal_febrero_sum": 50.0, "caudal_marzo_sum": 50.0,
+        "caudal_abril_sum": 40.0, "caudal_mayo_sum": 30.0, "caudal_junio_sum": 20.0,
+        "caudal_julio_sum": 20.0, "caudal_agosto_sum": 25.0, "caudal_septiembre_sum": 35.0,
+        "caudal_octubre_sum": 40.0, "caudal_noviembre_sum": 45.0, "caudal_diciembre_sum": 50.0,
     }
 
     with patch("api.routers.derechos.execute_query", return_value=[mock_row]):
@@ -89,10 +89,10 @@ async def test_get_subcuenca_derechos_aggregates():
     mock_row = {
         "puntos_con_derechos": 3,
         "volumen_anual_total": 500000,
-        "CAUDAL_ENERO": 25.0, "CAUDAL_FEBRERO": 25.0, "CAUDAL_MARZO": 25.0,
-        "CAUDAL_ABRIL": 20.0, "CAUDAL_MAYO": 15.0, "CAUDAL_JUNIO": 10.0,
-        "CAUDAL_JULIO": 10.0, "CAUDAL_AGOSTO": 12.0, "CAUDAL_SEPTIEMBRE": 17.0,
-        "CAUDAL_OCTUBRE": 20.0, "CAUDAL_NOVIEMBRE": 22.0, "CAUDAL_DICIEMBRE": 25.0,
+        "caudal_enero_sum": 25.0, "caudal_febrero_sum": 25.0, "caudal_marzo_sum": 25.0,
+        "caudal_abril_sum": 20.0, "caudal_mayo_sum": 15.0, "caudal_junio_sum": 10.0,
+        "caudal_julio_sum": 10.0, "caudal_agosto_sum": 12.0, "caudal_septiembre_sum": 17.0,
+        "caudal_octubre_sum": 20.0, "caudal_noviembre_sum": 22.0, "caudal_diciembre_sum": 25.0,
     }
 
     with patch("api.routers.derechos.execute_query", return_value=[mock_row]):

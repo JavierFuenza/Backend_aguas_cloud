@@ -1,4 +1,3 @@
-# Backend_aguas_cloud/api/routers/derechos.py
 import logging
 from fastapi import APIRouter, HTTPException, Query
 from core.database import execute_query
@@ -15,7 +14,8 @@ MESES = [
     "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
 ]
 
-COLUMNAS_CAUDAL = [f"CAUDAL_{m.upper()}" for m in MESES]
+COLUMNAS_CAUDAL_PUNTOS = [f"CAUDAL_{m.upper()}" for m in MESES]
+COLUMNAS_CAUDAL_CUENCAS = [f"caudal_{m}_sum" for m in MESES]
 
 
 @router.get(
@@ -28,13 +28,14 @@ async def get_punto_derechos(
     utm_norte: int = Query(..., description="Coordenada UTM Norte"),
     utm_este: int = Query(..., description="Coordenada UTM Este"),
 ):
+    cols = ", ".join(COLUMNAS_CAUDAL_PUNTOS)
     query = f"""
     SELECT TOP 1
         TIPO_DERECHO,
-        {', '.join(COLUMNAS_CAUDAL)},
-        VOLUMEN_ANUAL
-    FROM dw.Mediciones_full
-    WHERE UTM_NORTE = ? AND UTM_ESTE = ?
+        VOLUMEN_ANUAL,
+        {cols}
+    FROM dw.Puntos_Mapa
+    WHERE UTM_Norte = ? AND UTM_Este = ?
       AND TIPO_DERECHO IS NOT NULL
     """
     try:
@@ -54,29 +55,22 @@ async def get_punto_derechos(
         "volumen_anual": row.get("VOLUMEN_ANUAL"),
         "caudal_mensual": {
             mes: row.get(col)
-            for mes, col in zip(MESES, COLUMNAS_CAUDAL)
+            for mes, col in zip(MESES, COLUMNAS_CAUDAL_PUNTOS)
         }
     }
 
 
-def _build_derechos_aggregation(where_clause: str) -> str:
-    caudal_sums = ",\n    ".join(
-        f"SUM({col}) AS {col}" for col in COLUMNAS_CAUDAL
+def _build_cuenca_stats_query(where_clause: str) -> str:
+    sums = ",\n    ".join(
+        f"SUM(ISNULL({col}, 0)) AS {col}" for col in COLUMNAS_CAUDAL_CUENCAS
     )
     return f"""
     SELECT
-        COUNT(*) AS puntos_con_derechos,
-        SUM(VOLUMEN_ANUAL) AS volumen_anual_total,
-        {caudal_sums}
-    FROM (
-        SELECT
-            UTM_NORTE, UTM_ESTE,
-            MAX(VOLUMEN_ANUAL) AS VOLUMEN_ANUAL,
-            {", ".join(f"MAX({col}) AS {col}" for col in COLUMNAS_CAUDAL)}
-        FROM dw.Mediciones_full
-        WHERE {where_clause} AND TIPO_DERECHO IS NOT NULL
-        GROUP BY UTM_NORTE, UTM_ESTE
-    ) AS puntos_unicos
+        SUM(ISNULL(puntos_con_derechos, 0)) AS puntos_con_derechos,
+        SUM(ISNULL(volumen_anual_total, 0)) AS volumen_anual_total,
+        {sums}
+    FROM dw.Cuenca_Stats
+    WHERE {where_clause}
     """
 
 
@@ -88,7 +82,7 @@ def _build_derechos_aggregation(where_clause: str) -> str:
 async def get_cuenca_derechos(
     cod_cuenca: int = Query(..., description="Código de cuenca"),
 ):
-    query = _build_derechos_aggregation("COD_CUENCA = ?")
+    query = _build_cuenca_stats_query("Cod_Cuenca = ?")
     try:
         rows = await execute_query(query, params=[cod_cuenca], use_cache=False)
     except Exception as e:
@@ -104,7 +98,7 @@ async def get_cuenca_derechos(
         "volumen_anual_total": row.get("volumen_anual_total", 0),
         "caudal_mensual_suma": {
             mes: row.get(col, 0)
-            for mes, col in zip(MESES, COLUMNAS_CAUDAL)
+            for mes, col in zip(MESES, COLUMNAS_CAUDAL_CUENCAS)
         }
     }
 
@@ -118,7 +112,7 @@ async def get_subcuenca_derechos(
     cod_cuenca: int = Query(..., description="Código de cuenca"),
     cod_subcuenca: int = Query(..., description="Código de subcuenca"),
 ):
-    query = _build_derechos_aggregation("COD_CUENCA = ? AND COD_SUBCUENCA = ?")
+    query = _build_cuenca_stats_query("Cod_Cuenca = ? AND Cod_Subcuenca = ?")
     try:
         rows = await execute_query(query, params=[cod_cuenca, cod_subcuenca], use_cache=False)
     except Exception as e:
@@ -134,6 +128,6 @@ async def get_subcuenca_derechos(
         "volumen_anual_total": row.get("volumen_anual_total", 0),
         "caudal_mensual_suma": {
             mes: row.get(col, 0)
-            for mes, col in zip(MESES, COLUMNAS_CAUDAL)
+            for mes, col in zip(MESES, COLUMNAS_CAUDAL_CUENCAS)
         }
     }
