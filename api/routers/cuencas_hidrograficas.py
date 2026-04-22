@@ -57,20 +57,37 @@ async def get_unique_cuencas():
     summary="Listado de sectores SHAC",
     description="Obtiene el listado de Sectores Hidrogeológicos de Aprovechamiento Común (SHAC) con total de puntos."
 )
-async def get_shacs():
-    """Obtiene lista de SHACs disponibles con conteo de puntos"""
+async def get_shacs(
+    region: Optional[int] = Query(None, description="Código de región"),
+    cod_cuenca: Optional[int] = Query(None, description="Código de cuenca"),
+    cod_subcuenca: Optional[int] = Query(None, description="Código de subcuenca"),
+):
+    """Obtiene lista de SHACs disponibles con conteo de puntos, opcionalmente filtrados por región/cuenca/subcuenca"""
+    filters = ["COD_SECTOR_SHA IS NOT NULL"]
+    params = []
+    if region is not None:
+        filters.append("Region = ?")
+        params.append(region)
+    if cod_cuenca is not None:
+        filters.append("Cod_Cuenca = ?")
+        params.append(cod_cuenca)
+    if cod_subcuenca is not None:
+        filters.append("Cod_Subcuenca = ?")
+        params.append(cod_subcuenca)
+
+    where = " AND ".join(filters)
+    query = f"""
+    SELECT
+        COD_SECTOR_SHA AS cod_sector_sha,
+        SECTOR_SHA AS sector_sha,
+        COUNT(*) AS total_puntos
+    FROM dw.Puntos_Mapa
+    WHERE {where}
+    GROUP BY COD_SECTOR_SHA, SECTOR_SHA
+    ORDER BY COD_SECTOR_SHA
+    """
     try:
-        query = """
-        SELECT
-            COD_SECTOR_SHA AS cod_sector_sha,
-            SECTOR_SHA AS sector_sha,
-            COUNT(*) AS total_puntos
-        FROM dw.Puntos_Mapa
-        WHERE COD_SECTOR_SHA IS NOT NULL
-        GROUP BY COD_SECTOR_SHA, SECTOR_SHA
-        ORDER BY COD_SECTOR_SHA
-        """
-        results = await execute_query(query)
+        results = await execute_query(query, params=params if params else None)
         return {
             "shacs": [
                 {
