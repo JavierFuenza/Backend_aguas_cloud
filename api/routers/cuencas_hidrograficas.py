@@ -108,19 +108,36 @@ async def get_shacs(
     summary="Listado de Juntas de Vigilancia",
     description="Obtiene el listado de Juntas de Vigilancia con total de puntos asociados."
 )
-async def get_juntas():
-    """Obtiene lista de Juntas disponibles con conteo de puntos"""
+async def get_juntas(
+    region: Optional[int] = Query(None, description="Código de región"),
+    cod_cuenca: Optional[int] = Query(None, description="Código de cuenca"),
+    cod_subcuenca: Optional[int] = Query(None, description="Código de subcuenca"),
+):
+    """Obtiene lista de Juntas disponibles con conteo de puntos, opcionalmente filtradas por región/cuenca/subcuenca"""
+    filters = ["ID_JUNTA IS NOT NULL"]
+    params = []
+    if region is not None:
+        filters.append("Region = ?")
+        params.append(region)
+    if cod_cuenca is not None:
+        filters.append("Cod_Cuenca = ?")
+        params.append(cod_cuenca)
+    if cod_subcuenca is not None:
+        filters.append("Cod_Subcuenca = ?")
+        params.append(cod_subcuenca)
+
+    where = " AND ".join(filters)
+    query = f"""
+    SELECT
+        ID_JUNTA AS id_junta,
+        COUNT(*) AS total_puntos
+    FROM dw.Puntos_Mapa
+    WHERE {where}
+    GROUP BY ID_JUNTA
+    ORDER BY ID_JUNTA
+    """
     try:
-        query = """
-        SELECT
-            ID_JUNTA AS id_junta,
-            COUNT(*) AS total_puntos
-        FROM dw.Puntos_Mapa
-        WHERE ID_JUNTA IS NOT NULL
-        GROUP BY ID_JUNTA
-        ORDER BY ID_JUNTA
-        """
-        results = await execute_query(query)
+        results = await execute_query(query, params=params if params else None)
         return {
             "juntas": [
                 {
