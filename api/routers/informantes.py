@@ -7,6 +7,8 @@ from models.schemas import InformanteResponse
 
 router = APIRouter()
 
+MAX_LIMIT = 10000
+
 @router.get(
     "/informantes",
     tags=["Informantes"],
@@ -53,9 +55,10 @@ async def get_informantes(
             query += " AND COD_SUBSUBCUENCA = ?"
             params.append(cod_subsubcuenca)
             
-        # Apply limit if necessary by wrapping query
+        # Apply limit if necessary by wrapping query (clamped to safe range)
         if limit is not None:
-            query = f"SELECT TOP {limit} * FROM ({query}) as filtered"
+            safe_limit = max(1, min(int(limit), MAX_LIMIT))
+            query = f"SELECT TOP {safe_limit} * FROM ({query}) as filtered"
             
         results = await execute_query(query, params)
         

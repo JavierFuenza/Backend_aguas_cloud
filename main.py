@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from queue import Queue, Empty
 from fastapi import FastAPI
@@ -87,11 +88,14 @@ app = FastAPI(
     }
 )
 
+_cors_env = os.getenv("CORS_ALLOW_ORIGINS", "")
+allowed_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=False,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
     max_age=86400
 )

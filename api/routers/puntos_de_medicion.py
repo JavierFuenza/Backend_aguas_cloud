@@ -7,6 +7,8 @@ from models.schemas import PuntoResponse, PuntoInfoResponse, UTMLocation
 
 router = APIRouter()
 
+MAX_LIMIT = 10000
+
 @router.get("/puntos/count", tags=["Puntos de Medición"])
 async def get_puntos_count(
     region: Optional[int] = Query(None),
@@ -202,9 +204,10 @@ async def get_puntos(
             puntos_query += " AND ID_JUNTA = ?"
             query_params.append(id_junta)
 
-        # Apply limit
+        # Apply limit (clamped to safe range; int coerced by FastAPI)
         if limit is not None:
-            puntos_query = f"SELECT TOP {limit} * FROM ({puntos_query}) AS filtered_puntos"
+            safe_limit = max(1, min(int(limit), MAX_LIMIT))
+            puntos_query = f"SELECT TOP {safe_limit} * FROM ({puntos_query}) AS filtered_puntos"
 
         logging.info(f"Ejecutando query desde Puntos_Mapa: {puntos_query}")
         puntos = await execute_query(puntos_query, query_params)
@@ -415,10 +418,12 @@ async def get_point_statistics(locations: List[UTMLocation]):
             return [response]
         else:
             # Multiple locations analysis
-            coords_conditions = " OR ".join([
-                f"(UTM_Norte = {loc.utm_norte} AND UTM_Este = {loc.utm_este})"
-                for loc in locations
-            ])
+            coords_conditions = " OR ".join(
+                ["(UTM_Norte = ? AND UTM_Este = ?)" for _ in locations]
+            )
+            coords_params = []
+            for loc in locations:
+                coords_params.extend([loc.utm_norte, loc.utm_este])
 
             multi_stats_query = f"""
             SELECT
@@ -432,7 +437,7 @@ async def get_point_statistics(locations: List[UTMLocation]):
             AND CAUDAL IS NOT NULL
             """
 
-            results = await execute_query(multi_stats_query)
+            results = await execute_query(multi_stats_query, coords_params)
             result = results[0] if results else {}
 
             return [{
