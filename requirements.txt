@@ -69,8 +69,6 @@ python-dotenv==1.1.1
     # via backend-aguas-cloud (pyproject.toml)
 python-multipart==0.0.20
     # via backend-aguas-cloud (pyproject.toml)
-redis==6.4.0
-    # via backend-aguas-cloud (pyproject.toml)
 requests==2.34.1
     # via
     #   azure-core
