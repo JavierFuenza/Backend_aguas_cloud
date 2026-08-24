@@ -90,7 +90,7 @@ def save_reports(df):
             
     return csv_filename, txt_filename
 
-def test_endpoint(endpoint, method="GET", params=None, json_body=None):
+def check_endpoint(endpoint, method="GET", params=None, json_body=None):
     """Ejecuta una petición y mide el tiempo"""
     url = f"{BASE_URL}{endpoint}"
     start_time = time.time()
@@ -105,7 +105,7 @@ def test_endpoint(endpoint, method="GET", params=None, json_body=None):
         # Intentar parsear JSON para verificar validez
         try:
             data = response.json()
-        except:
+        except ValueError:
             data = None
             
         log_result(endpoint, method, response.status_code, elapsed_time)
@@ -121,16 +121,16 @@ def run_tests():
 
     # 1. SISTEMA Y HEALTH
     print(f"\n{Fore.MAGENTA}--- Sistema ---{Style.RESET_ALL}")
-    test_endpoint("/health")
-    test_endpoint("/test-db")
-    test_endpoint("/count")
-    test_endpoint("/atlas")
-    test_endpoint("/cache/stats")
+    check_endpoint("/health")
+    check_endpoint("/test-db")
+    check_endpoint("/count")
+    check_endpoint("/atlas")
+    check_endpoint("/cache/stats")
 
     # 2. OBTENER DATOS SEMILLA
     print(f"\n{Fore.MAGENTA}--- Recolectando datos semilla ---{Style.RESET_ALL}")
     
-    _, cuencas_data = test_endpoint("/cuencas")
+    _, cuencas_data = check_endpoint("/cuencas")
     cuenca_sample = None
     subcuenca_sample = None
     subsubcuenca_sample = None
@@ -148,7 +148,7 @@ def run_tests():
             cuenca_sample = sample['cod_cuenca']
             print(f"    -> Usando Cuenca ID: {cuenca_sample} (Sin subsubcuenca)")
 
-    _, puntos_data = test_endpoint("/puntos", params={"limit": 5})
+    _, puntos_data = check_endpoint("/puntos", params={"limit": 5})
     punto_sample = None
     if puntos_data and isinstance(puntos_data, list) and len(puntos_data) > 0:
         punto_sample = puntos_data[0]
@@ -156,50 +156,50 @@ def run_tests():
 
     # 3. PRUEBAS DE CUENCAS
     print(f"\n{Fore.MAGENTA}--- Cuencas e Hidrografía ---{Style.RESET_ALL}")
-    test_endpoint("/filtrosreactivos")
+    check_endpoint("/filtrosreactivos")
     
     if cuenca_sample:
-        test_endpoint("/cuencas/stats", params={"cod_cuenca": cuenca_sample, "include_global": True})
-        test_endpoint("/cuencas/cuenca/series_de_tiempo/caudal", params={"cuenca_identificador": cuenca_sample})
-        test_endpoint("/cuencas/cuenca/series_de_tiempo/altura_linimetrica", params={"cuenca_identificador": cuenca_sample})
-        test_endpoint("/cuencas/cuenca/series_de_tiempo/nivel_freatico", params={"cuenca_identificador": cuenca_sample})
+        check_endpoint("/cuencas/stats", params={"cod_cuenca": cuenca_sample, "include_global": True})
+        check_endpoint("/cuencas/cuenca/series_de_tiempo/caudal", params={"cuenca_identificador": cuenca_sample})
+        check_endpoint("/cuencas/cuenca/series_de_tiempo/altura_linimetrica", params={"cuenca_identificador": cuenca_sample})
+        check_endpoint("/cuencas/cuenca/series_de_tiempo/nivel_freatico", params={"cuenca_identificador": cuenca_sample})
 
     if subcuenca_sample:
-        test_endpoint("/cuencas/subcuenca/series_de_tiempo/caudal", params={"cuenca_identificador": subcuenca_sample})
-        test_endpoint("/cuencas/subcuenca/series_de_tiempo/altura_linimetrica", params={"cuenca_identificador": subcuenca_sample}) # Agregado
-        test_endpoint("/cuencas/subcuenca/series_de_tiempo/nivel_freatico", params={"cuenca_identificador": subcuenca_sample})
+        check_endpoint("/cuencas/subcuenca/series_de_tiempo/caudal", params={"cuenca_identificador": subcuenca_sample})
+        check_endpoint("/cuencas/subcuenca/series_de_tiempo/altura_linimetrica", params={"cuenca_identificador": subcuenca_sample}) # Agregado
+        check_endpoint("/cuencas/subcuenca/series_de_tiempo/nivel_freatico", params={"cuenca_identificador": subcuenca_sample})
 
     if subsubcuenca_sample:
-        test_endpoint("/cuencas/subsubcuenca/series_de_tiempo/caudal", params={"cuenca_identificador": subsubcuenca_sample})
-        test_endpoint("/cuencas/subsubcuenca/series_de_tiempo/altura_linimetrica", params={"cuenca_identificador": subsubcuenca_sample})
-        test_endpoint("/cuencas/subsubcuenca/series_de_tiempo/nivel_freatico", params={"cuenca_identificador": subsubcuenca_sample}) # Agregado
+        check_endpoint("/cuencas/subsubcuenca/series_de_tiempo/caudal", params={"cuenca_identificador": subsubcuenca_sample})
+        check_endpoint("/cuencas/subsubcuenca/series_de_tiempo/altura_linimetrica", params={"cuenca_identificador": subsubcuenca_sample})
+        check_endpoint("/cuencas/subsubcuenca/series_de_tiempo/nivel_freatico", params={"cuenca_identificador": subsubcuenca_sample}) # Agregado
 
     # PRUEBAS SHAC
     print(f"\n{Fore.MAGENTA}--- SHAC ---{Style.RESET_ALL}")
-    test_endpoint("/cuencas/shac/series_de_tiempo/caudal", params={"shac_identificador": "499"})
+    check_endpoint("/cuencas/shac/series_de_tiempo/caudal", params={"shac_identificador": "499"})
 
     # 4. PRUEBAS DE PUNTOS
     print(f"\n{Fore.MAGENTA}--- Puntos de Medición ---{Style.RESET_ALL}")
-    test_endpoint("/puntos/count", params={"region": 15}) 
-    test_endpoint("/puntos/count", params={"apr": True, "id_junta": 1.0, "shac": 121}) # Filtros nuevos
-    test_endpoint("/puntos/count", params={"id_tipo_extraccion": 2}) # Extracción superficial/subterránea
-    test_endpoint("/puntos/count", params={"search": "obracod123"}) # Búsqueda por obra
+    check_endpoint("/puntos/count", params={"region": 15}) 
+    check_endpoint("/puntos/count", params={"apr": True, "id_junta": 1.0, "shac": 121}) # Filtros nuevos
+    check_endpoint("/puntos/count", params={"id_tipo_extraccion": 2}) # Extracción superficial/subterránea
+    check_endpoint("/puntos/count", params={"search": "obracod123"}) # Búsqueda por obra
     
     if punto_sample:
         norte = punto_sample['utm_norte']
         este = punto_sample['utm_este']
-        test_endpoint("/puntos/info", params={"utm_norte": norte, "utm_este": este})
-        test_endpoint("/puntos/series_de_tiempo/caudal", params={"utm_norte": norte, "utm_este": este})
-        test_endpoint("/puntos/series_de_tiempo/altura_linimetrica", params={"utm_norte": norte, "utm_este": este})
-        test_endpoint("/puntos/series_de_tiempo/nivel_freatico", params={"utm_norte": norte, "utm_este": este})
+        check_endpoint("/puntos/info", params={"utm_norte": norte, "utm_este": este})
+        check_endpoint("/puntos/series_de_tiempo/caudal", params={"utm_norte": norte, "utm_este": este})
+        check_endpoint("/puntos/series_de_tiempo/altura_linimetrica", params={"utm_norte": norte, "utm_este": este})
+        check_endpoint("/puntos/series_de_tiempo/nivel_freatico", params={"utm_norte": norte, "utm_este": este})
         
         body = [{"utm_norte": norte, "utm_este": este}]
-        test_endpoint("/puntos/estadisticas", method="POST", json_body=body)
+        check_endpoint("/puntos/estadisticas", method="POST", json_body=body)
 
     # 5. RENDIMIENTO Y CACHÉ
     print(f"\n{Fore.MAGENTA}--- Rendimiento ---{Style.RESET_ALL}")
-    test_endpoint("/cache/clear", method="POST") # Agregado
-    test_endpoint("/performance/warm-up")
+    check_endpoint("/cache/clear", method="POST") # Agregado
+    check_endpoint("/performance/warm-up")
 
 def generate_final_report():
     print(f"\n{Fore.YELLOW}=== Generando Reportes Globales ==={Style.RESET_ALL}")

@@ -73,7 +73,7 @@ async def main(req: func.HttpRequest) -> func.HttpResponse:
             # Get request body
             try:
                 body = req.get_body().decode('utf-8') if req.get_body() else ""
-            except:
+            except (UnicodeDecodeError, ValueError):
                 body = ""
 
             # Get headers

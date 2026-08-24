@@ -1,3 +1,4 @@
+import logging
 import math
 from typing import Optional
 
@@ -19,5 +20,10 @@ def utm_to_latlon(utm_este: float, utm_norte: float, huso: int = 19) -> tuple:
         lon = central_meridian + (utm_este - 500000) / (111320 * math.cos(math.radians(lat)))
 
         return lon, lat
-    except:
+    except (ValueError, ZeroDivisionError, TypeError):
+        # Un punto que no se puede proyectar desaparece del mapa: dejar rastro
+        # en vez de devolver (None, None) en silencio.
+        logging.warning(
+            f"No se pudo convertir UTM a lat/lon: este={utm_este} norte={utm_norte} huso={huso}"
+        )
         return None, None
