@@ -43,10 +43,7 @@ async def get_caudal_por_tiempo_por_cuenca(
         query = f"""
         SELECT 
             s.FECHA_MEDICION AS fecha_medicion, 
-            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio,
-            SUM(CAST(s.CAUDAL AS FLOAT)) AS caudal_sumado,
-            SUM(CAST(s.TOTALIZADOR AS BIGINT)) AS totalizador_sumado,
-            MAX(CAST(s.TOTALIZADOR AS BIGINT)) AS totalizador_max
+            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio
         FROM dw.Series_tiempo s
         {join_puntos}
         WHERE {subquery_filter}
@@ -73,9 +70,6 @@ async def get_caudal_por_tiempo_por_cuenca(
                     ),
                     "caudal": r.get("caudal_promedio"),
                     "caudal_promedio": r.get("caudal_promedio"),
-                    "caudal_sumado": r.get("caudal_sumado"),
-                    "totalizador_sumado": r.get("totalizador_sumado"),
-                    "totalizador_max": r.get("totalizador_max"),
                 }
                 for r in results
             ]
@@ -272,10 +266,7 @@ async def get_caudal_por_tiempo_por_subcuenca(
         query = f"""
         SELECT 
             s.FECHA_MEDICION AS fecha_medicion, 
-            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio,
-            SUM(CAST(s.CAUDAL AS FLOAT)) AS caudal_sumado,
-            SUM(CAST(s.TOTALIZADOR AS BIGINT)) AS totalizador_sumado,
-            MAX(CAST(s.TOTALIZADOR AS BIGINT)) AS totalizador_max
+            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio
         FROM dw.Series_tiempo s
         {join_puntos}
         WHERE {subquery_filter}
@@ -302,9 +293,6 @@ async def get_caudal_por_tiempo_por_subcuenca(
                     ),
                     "caudal": r.get("caudal_promedio"),
                     "caudal_promedio": r.get("caudal_promedio"),
-                    "caudal_sumado": r.get("caudal_sumado"),
-                    "totalizador_sumado": r.get("totalizador_sumado"),
-                    "totalizador_max": r.get("totalizador_max"),
                 }
                 for r in results
             ]
@@ -501,10 +489,7 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
         query = f"""
         SELECT 
             s.FECHA_MEDICION AS fecha_medicion, 
-            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio,
-            SUM(CAST(s.CAUDAL AS FLOAT)) AS caudal_sumado,
-            SUM(CAST(s.TOTALIZADOR AS BIGINT)) AS totalizador_sumado,
-            MAX(CAST(s.TOTALIZADOR AS BIGINT)) AS totalizador_max
+            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio
         FROM dw.Series_tiempo s
         {join_puntos}
         WHERE {subquery_filter}
@@ -531,9 +516,6 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
                     ),
                     "caudal": r.get("caudal_promedio"),
                     "caudal_promedio": r.get("caudal_promedio"),
-                    "caudal_sumado": r.get("caudal_sumado"),
-                    "totalizador_sumado": r.get("totalizador_sumado"),
-                    "totalizador_max": r.get("totalizador_max"),
                 }
                 for r in results
             ]
@@ -697,7 +679,7 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
     "/cuencas/shac/series_de_tiempo/caudal",
     tags=["Series Temporales"],
     summary="Serie temporal de caudal por SHAC",
-    description="Obtiene la serie temporal de caudal usando dw.Series_tiempo con caudales sumados y totalizadores agrupados por Sector Hidrogeológico de Aprovechamiento Común (SHAC).",
+    description="Obtiene la serie temporal de caudal usando dw.Series_tiempo agrupada por Sector Hidrogeológico de Aprovechamiento Común (SHAC).",
 )
 async def get_caudal_por_tiempo_por_shac(
     shac_identificador: str = Query(
@@ -722,10 +704,7 @@ async def get_caudal_por_tiempo_por_shac(
         query = f"""
         SELECT 
             s.FECHA_MEDICION AS fecha_medicion, 
-            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio,
-            SUM(CAST(s.CAUDAL AS FLOAT)) AS caudal_sumado,
-            SUM(CAST(s.TOTALIZADOR AS BIGINT)) AS totalizador_sumado,
-            MAX(CAST(s.TOTALIZADOR AS BIGINT)) AS totalizador_max
+            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio
         FROM dw.Series_tiempo s
         INNER JOIN dw.Puntos_Mapa p 
             ON s.UTM_NORTE = p.UTM_Norte 
@@ -763,9 +742,6 @@ async def get_caudal_por_tiempo_por_shac(
                 ),
                 "caudal": r.get("caudal_promedio"),
                 "caudal_promedio": r.get("caudal_promedio"),
-                "caudal_sumado": r.get("caudal_sumado"),
-                "totalizador_sumado": r.get("totalizador_sumado"),
-                "totalizador_max": r.get("totalizador_max"),
             }
             for r in results
         ]
@@ -953,10 +929,7 @@ async def get_caudal_por_tiempo_por_punto(
         SELECT 
             FECHA_MEDICION as fecha_medicion, 
             CAUDAL as caudal,
-            CAUDAL as caudal_promedio,
-            CAUDAL as caudal_sumado,
-            TOTALIZADOR as totalizador_max,
-            TOTALIZADOR as totalizador_sumado
+            CAUDAL as caudal_promedio
         FROM dw.Series_tiempo
         WHERE UTM_NORTE = ? AND UTM_ESTE = ? AND CAUDAL IS NOT NULL
         """
@@ -981,9 +954,6 @@ async def get_caudal_por_tiempo_por_punto(
                     ),
                     "caudal": r.get("caudal"),
                     "caudal_promedio": r.get("caudal_promedio"),
-                    "caudal_sumado": r.get("caudal_sumado"),
-                    "totalizador_sumado": r.get("totalizador_sumado"),
-                    "totalizador_max": r.get("totalizador_max"),
                 }
                 for r in results
             ]
