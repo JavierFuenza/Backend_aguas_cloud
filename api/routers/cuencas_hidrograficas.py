@@ -265,6 +265,7 @@ async def get_cuencas_stats(
             caudal_promedio,
             caudal_minimo,
             caudal_maximo,
+            caudal_desviacion_estandar,
             total_puntos_unicos,
             total_mediciones
         FROM dw.Cuenca_Stats
@@ -305,6 +306,10 @@ async def get_cuencas_stats(
                 "caudal_promedio": safe_round(r.get('caudal_promedio')),
                 "caudal_minimo": safe_round(r.get('caudal_minimo')),
                 "caudal_maximo": safe_round(r.get('caudal_maximo')),
+                # La columna existe en dw.Cuenca_Stats pero no se estaba
+                # seleccionando: el frontend recibía undefined y su `|| 0`
+                # dejaba la desviación estándar en cero para toda cuenca.
+                "caudal_desviacion_estandar": safe_round(r.get('caudal_desviacion_estandar')),
                 "total_puntos_unicos": r.get('total_puntos_unicos', 0),
                 "total_mediciones": r.get('total_mediciones', 0)
             }
