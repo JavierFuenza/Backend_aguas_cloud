@@ -32,13 +32,17 @@ async def get_informantes(
     try:
         logging.info("Consultando informantes con filtros...")
 
+        # dw.Informante trae una fila por (persona, obra): 6.135 filas para 1.409
+        # personas. Sin agregar, un informante con 13 obras ocupaba 13 lugares del
+        # "Top 10". Se agrupa por persona y se cuentan sus obras distintas.
         query = """
         SELECT
             NOMB_INF,
             A_PAT_INF,
             A_MAT_INF,
-            CANTIDAD_REPORTES,
-            ULTIMA_FECHA_MEDICION
+            COUNT(DISTINCT CONCAT(UTM_NORTE, '|', UTM_ESTE)) AS CANTIDAD_OBRAS,
+            SUM(CANTIDAD_REPORTES) AS CANTIDAD_REPORTES,
+            MAX(ULTIMA_FECHA_MEDICION) AS ULTIMA_FECHA_MEDICION
         FROM dw.Informante
         WHERE 1=1
         """
@@ -60,10 +64,19 @@ async def get_informantes(
             query += " AND COD_SUBSUBCUENCA = ?"
             params.append(cod_subsubcuenca)
 
-        # Apply limit if necessary by wrapping query (clamped to safe range)
+        # El GROUP BY y el orden van después de los filtros. Antes no había ORDER BY
+        # alguno, así que "TOP 10" devolvía diez filas cualesquiera y el ranking no
+        # rankeaba nada. La DGA lo pidió por mayor número de obras (cat. 3.8);
+        # los reportes desempatan.
+        query += """
+        GROUP BY NOMB_INF, A_PAT_INF, A_MAT_INF
+        ORDER BY CANTIDAD_OBRAS DESC, CANTIDAD_REPORTES DESC
+        """
+
+        # Apply limit if necessary (clamped to safe range)
         if limit is not None:
             safe_limit = max(1, min(int(limit), MAX_LIMIT))
-            query = f"SELECT TOP {safe_limit} * FROM ({query}) as filtered"
+            query = query.replace("SELECT\n", f"SELECT TOP {safe_limit}\n", 1)
 
         results = await execute_query(query, params)
 
@@ -81,6 +94,7 @@ async def get_informantes(
             informantes_out.append(
                 {
                     "nombre_completo": nombre,
+                    "cantidad_obras": r.get("CANTIDAD_OBRAS") or 0,
                     "cantidad_reportes": r.get("CANTIDAD_REPORTES") or 0,
                     "ultima_fecha_medicion": ultima_fecha,
                 }

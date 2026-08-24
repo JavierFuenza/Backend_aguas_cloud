@@ -215,6 +215,9 @@ class NivelFreaticoTimeSeriesPoint(BaseModel):
 
 class InformanteResponse(BaseModel):
     nombre_completo: str = Field(..., description="Nombre completo del informante")
+    cantidad_obras: int = Field(
+        0, description="Cantidad de obras distintas que reporta el informante"
+    )
     cantidad_reportes: int = Field(
         ..., description="Cantidad de reportes emitidos por el informante"
     )
