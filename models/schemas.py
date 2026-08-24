@@ -56,7 +56,8 @@ class PuntoInfoResponse(BaseModel):
     id_junta: Optional[float] = Field(None, description="ID Junta de Vigilancia")
     parte_junta: Optional[bool] = None
     representa_junta: Optional[bool] = None
-    canal_transmision: Optional[int] = Field(None, description="Último canal de transmisión reportado")
+    canal_transmision: Optional[int] = Field(None, description="Canal de transmisión con más mediciones en el punto")
+    canales_transmision: List[int] = Field(default_factory=list, description="Todos los canales de transmisión del punto (0=Online, 1=Archivo, 2=Formulario)")
 
     class Config:
         json_schema_extra = {

@@ -28,10 +28,14 @@ async def get_puntos_count(
     try:
         logging.info(f"Contando puntos con filtros")
 
+        # dw.Puntos_Mapa trae filas repetidas para un mismo punto (ver /puntos),
+        # así que se cuentan pares de coordenadas distintos y no filas.
+        # Mismo filtro de coordenadas que /puntos para que ambos totales coincidan.
         count_query = """
-        SELECT COUNT(*) as total_puntos_unicos
+        SELECT DISTINCT UTM_Norte, UTM_Este
         FROM dw.Puntos_Mapa
-        WHERE 1=1
+        WHERE UTM_Norte IS NOT NULL
+          AND UTM_Este IS NOT NULL
         """
 
         query_params = []
@@ -68,9 +72,11 @@ async def get_puntos_count(
             query_params.append(1 if pozo else 0)
 
         if codigo_obra is not None:
-            count_query += " AND codigo LIKE ?"
-            query_params.append(f"%{codigo_obra}%")
-            
+            # Búsqueda exacta: con LIKE '%x%' "OB-0202-1" traía también
+            # OB-0202-1x, OB-0202-1xx, etc.
+            count_query += " AND codigo = ?"
+            query_params.append(codigo_obra.strip())
+
         if shac is not None:
             count_query += " AND COD_SECTOR_SHA = ?"
             query_params.append(shac)
@@ -82,6 +88,8 @@ async def get_puntos_count(
         if id_junta is not None:
             count_query += " AND ID_JUNTA = ?"
             query_params.append(id_junta)
+
+        count_query = f"SELECT COUNT(*) as total_puntos_unicos FROM ({count_query}) AS puntos_unicos"
 
         logging.info(f"Ejecutando query count: {count_query}")
         results = await execute_query(count_query, query_params)
@@ -149,7 +157,16 @@ async def get_puntos(
             Cod_Subsubcuenca,
             SECTOR_SHA,
             APR,
-            ID_JUNTA
+            ID_JUNTA,
+            -- dw.Puntos_Mapa está agregada por (punto, CANAL_TRANSMISION), no por
+            -- punto: el 21% de los puntos tiene más de una fila y el mapa dibujaba
+            -- un marcador por canal. Los campos que devuelve este endpoint son
+            -- idénticos entre canales, así que basta con quedarse con una fila;
+            -- se elige la del canal con más mediciones para que sea determinista.
+            ROW_NUMBER() OVER (
+                PARTITION BY UTM_Norte, UTM_Este
+                ORDER BY n_mediciones DESC, CANAL_TRANSMISION
+            ) AS rn
         FROM dw.Puntos_Mapa
         WHERE UTM_Norte IS NOT NULL
           AND UTM_Este IS NOT NULL
@@ -189,9 +206,11 @@ async def get_puntos(
             query_params.append(1 if pozo else 0)
 
         if codigo_obra is not None:
-            puntos_query += " AND codigo LIKE ?"
-            query_params.append(f"%{codigo_obra}%")
-            
+            # Búsqueda exacta: con LIKE '%x%' "OB-0202-1" traía 15 puntos
+            # (OB-0202-1, -10, -100, -304...). La DGA pide coincidencia exacta.
+            puntos_query += " AND codigo = ?"
+            query_params.append(codigo_obra.strip())
+
         if shac is not None:
             puntos_query += " AND COD_SECTOR_SHA = ?"
             query_params.append(shac)
@@ -204,10 +223,24 @@ async def get_puntos(
             puntos_query += " AND ID_JUNTA = ?"
             query_params.append(id_junta)
 
+        # Se queda una sola fila por par de coordenadas (rn = 1) y recién ahí
+        # se aplica el límite, para no gastar cupo en filas repetidas.
+        columnas = (
+            "UTM_Norte, UTM_Este, Huso, es_pozo_subterraneo, "
+            "Cod_Subsubcuenca, SECTOR_SHA, APR, ID_JUNTA"
+        )
+
         # Apply limit (clamped to safe range; int coerced by FastAPI)
+        top = ""
         if limit is not None:
             safe_limit = max(1, min(int(limit), MAX_LIMIT))
-            puntos_query = f"SELECT TOP {safe_limit} * FROM ({puntos_query}) AS filtered_puntos"
+            top = f"TOP {safe_limit} "
+
+        puntos_query = (
+            f"SELECT {top}{columnas} "
+            f"FROM ({puntos_query}) AS puntos_numerados "
+            f"WHERE rn = 1"
+        )
 
         logging.info(f"Ejecutando query desde Puntos_Mapa: {puntos_query}")
         puntos = await execute_query(puntos_query, query_params)
@@ -283,7 +316,31 @@ async def get_punto_info(
         if not punto_result:
             raise HTTPException(status_code=404, detail="Punto no encontrado")
 
-        p = punto_result[0]
+        # dw.Puntos_Mapa está agregada por (punto, CANAL_TRANSMISION), no por punto:
+        # el 21% de los puntos tiene más de una fila (hasta 8). Con TOP 1 se mostraba
+        # el caudal de un canal cualquiera — ej. OB-0202-591 informaba 4.701 mediciones
+        # cuando el punto tiene 45.511 repartidas en dos canales.
+        # Los campos descriptivos (cuenca, junta, APR…) son idénticos entre filas;
+        # solo hay que recomponer las estadísticas de caudal y la lista de canales.
+        p = max(punto_result, key=lambda r: r.get('n_mediciones') or 0)
+
+        total_mediciones = sum((r.get('n_mediciones') or 0) for r in punto_result)
+
+        # Promedio ponderado por número de mediciones de cada canal
+        caudal_promedio = None
+        if total_mediciones > 0:
+            suma = sum(
+                (r.get('caudal_promedio') or 0) * (r.get('n_mediciones') or 0)
+                for r in punto_result
+                if r.get('caudal_promedio') is not None
+            )
+            caudal_promedio = suma / total_mediciones
+
+        canales = sorted({
+            r.get('CANAL_TRANSMISION')
+            for r in punto_result
+            if r.get('CANAL_TRANSMISION') is not None
+        })
 
         # Build detailed response
         response = {
@@ -298,14 +355,17 @@ async def get_punto_info(
             "nombre_cuenca": p.get('Nom_Cuenca'),
             "nombre_subcuenca": p.get('Nom_Subcuenca'),
             "nombre_subsubcuenca": p.get('Nom_Subsubcuenca'),
-            "caudal_promedio": safe_round(p.get('caudal_promedio')),
-            "n_mediciones": p.get('n_mediciones') or 0,
+            "caudal_promedio": safe_round(caudal_promedio),
+            "n_mediciones": total_mediciones,
             "sector_sha": p.get('SECTOR_SHA'),
             "apr": bool(p.get('APR', 0)) if p.get('APR') is not None else None,
             "id_junta": p.get('ID_JUNTA'),
             "parte_junta": bool(p.get('PARTE_JUNTA', 0)) if p.get('PARTE_JUNTA') is not None else None,
             "representa_junta": bool(p.get('REPRESENTA_JUNTA', 0)) if p.get('REPRESENTA_JUNTA') is not None else None,
-            "canal_transmision": p.get('CANAL_TRANSMISION')
+            # Se mantiene el canal con más mediciones por compatibilidad, y se
+            # agrega la lista completa: un punto puede transmitir por varias vías.
+            "canal_transmision": p.get('CANAL_TRANSMISION'),
+            "canales_transmision": canales
         }
 
         logging.info(f"Info detallada obtenida para punto {utm_norte}/{utm_este}")
@@ -383,12 +443,15 @@ async def get_point_statistics(locations: List[UTMLocation]):
             }
 
             if caudal_stats.get('count', 0) > 0:
+                # safe_round distingue 0 de None. Con `if valor else None` una obra
+                # con caudal cero (ej. OB-0202-304) devolvía null y el visualizador
+                # mostraba '-' en vez de 0.
                 response["caudal"] = {
                     "total_registros": caudal_stats.get('count'),
-                    "promedio": round(caudal_stats.get('avg_val', 0), 2) if caudal_stats.get('avg_val') else None,
-                    "minimo": round(caudal_stats.get('min_val', 0), 2) if caudal_stats.get('min_val') else None,
-                    "maximo": round(caudal_stats.get('max_val', 0), 2) if caudal_stats.get('max_val') else None,
-                    "desviacion_estandar": round(caudal_stats.get('std_val', 0), 2) if caudal_stats.get('std_val') else None,
+                    "promedio": safe_round(caudal_stats.get('avg_val')),
+                    "minimo": safe_round(caudal_stats.get('min_val')),
+                    "maximo": safe_round(caudal_stats.get('max_val')),
+                    "desviacion_estandar": safe_round(caudal_stats.get('std_val')),
                     "primera_fecha": str(caudal_stats.get('primera_fecha')) if caudal_stats.get('primera_fecha') else None,
                     "ultima_fecha": str(caudal_stats.get('ultima_fecha')) if caudal_stats.get('ultima_fecha') else None
                 }
@@ -396,10 +459,10 @@ async def get_point_statistics(locations: List[UTMLocation]):
             if altura_stats.get('count', 0) > 0:
                 response["altura_limnimetrica"] = {
                     "total_registros": altura_stats.get('count'),
-                    "promedio": round(altura_stats.get('avg_val', 0), 2) if altura_stats.get('avg_val') else None,
-                    "minimo": round(altura_stats.get('min_val', 0), 2) if altura_stats.get('min_val') else None,
-                    "maximo": round(altura_stats.get('max_val', 0), 2) if altura_stats.get('max_val') else None,
-                    "desviacion_estandar": round(altura_stats.get('std_val', 0), 2) if altura_stats.get('std_val') else None,
+                    "promedio": safe_round(altura_stats.get('avg_val')),
+                    "minimo": safe_round(altura_stats.get('min_val')),
+                    "maximo": safe_round(altura_stats.get('max_val')),
+                    "desviacion_estandar": safe_round(altura_stats.get('std_val')),
                     "primera_fecha": str(altura_stats.get('primera_fecha')) if altura_stats.get('primera_fecha') else None,
                     "ultima_fecha": str(altura_stats.get('ultima_fecha')) if altura_stats.get('ultima_fecha') else None
                 }
@@ -407,10 +470,10 @@ async def get_point_statistics(locations: List[UTMLocation]):
             if nivel_stats.get('count', 0) > 0:
                 response["nivel_freatico"] = {
                     "total_registros": nivel_stats.get('count'),
-                    "promedio": round(nivel_stats.get('avg_val', 0), 2) if nivel_stats.get('avg_val') else None,
-                    "minimo": round(nivel_stats.get('min_val', 0), 2) if nivel_stats.get('min_val') else None,
-                    "maximo": round(nivel_stats.get('max_val', 0), 2) if nivel_stats.get('max_val') else None,
-                    "desviacion_estandar": round(nivel_stats.get('std_val', 0), 2) if nivel_stats.get('std_val') else None,
+                    "promedio": safe_round(nivel_stats.get('avg_val')),
+                    "minimo": safe_round(nivel_stats.get('min_val')),
+                    "maximo": safe_round(nivel_stats.get('max_val')),
+                    "desviacion_estandar": safe_round(nivel_stats.get('std_val')),
                     "primera_fecha": str(nivel_stats.get('primera_fecha')) if nivel_stats.get('primera_fecha') else None,
                     "ultima_fecha": str(nivel_stats.get('ultima_fecha')) if nivel_stats.get('ultima_fecha') else None
                 }
@@ -443,10 +506,10 @@ async def get_point_statistics(locations: List[UTMLocation]):
             return [{
                 "puntos_consultados": len(locations),
                 "total_registros_con_caudal": result.get('count', 0),
-                "caudal_promedio": round(result.get('avg_caudal', 0), 2) if result.get('avg_caudal') else None,
-                "caudal_minimo": round(result.get('min_caudal', 0), 2) if result.get('min_caudal') else None,
-                "caudal_maximo": round(result.get('max_caudal', 0), 2) if result.get('max_caudal') else None,
-                "desviacion_estandar_caudal": round(result.get('std_caudal', 0), 2) if result.get('std_caudal') else None
+                "caudal_promedio": safe_round(result.get('avg_caudal')),
+                "caudal_minimo": safe_round(result.get('min_caudal')),
+                "caudal_maximo": safe_round(result.get('max_caudal')),
+                "desviacion_estandar_caudal": safe_round(result.get('std_caudal'))
             }]
 
     except Exception as e:
