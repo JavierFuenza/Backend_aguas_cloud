@@ -1,8 +1,10 @@
 import asyncio
 import os
+import struct
 import time
 import logging
 import pyodbc
+from azure.identity import DefaultAzureCredential
 from queue import Queue, Empty
 from typing import List, Dict, Optional
 from core.cache_manager import memory_cache, cache_timestamps, get_cache_key, is_cache_valid, CACHE_TTL_DEFAULT
@@ -10,18 +12,28 @@ from core.cache_manager import memory_cache, cache_timestamps, get_cache_key, is
 connection_pool: Optional[Queue] = None
 POOL_SIZE = 10
 
+SQL_COPT_SS_ACCESS_TOKEN = 1256
+_credential = DefaultAzureCredential()
+
+
+def _get_token_struct() -> bytes:
+    token = _credential.get_token("https://database.windows.net/.default").token
+    token_bytes = token.encode("utf-16-le")
+    return struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
+
 
 def create_db_connection():
     server = os.getenv('SYNAPSE_SERVER')
     database = os.getenv('SYNAPSE_DATABASE')
-    username = os.getenv('SYNAPSE_USERNAME')
-    password = os.getenv('SYNAPSE_PASSWORD')
     connection_string = (
         f"DRIVER={{ODBC Driver 18 for SQL Server}};"
-        f"SERVER={server};DATABASE={database};UID={username};PWD={password};"
+        f"SERVER={server};DATABASE={database};"
         "Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;"
     )
-    return pyodbc.connect(connection_string)
+    return pyodbc.connect(
+        connection_string,
+        attrs_before={SQL_COPT_SS_ACCESS_TOKEN: _get_token_struct()},
+    )
 
 
 def get_db_connection():
