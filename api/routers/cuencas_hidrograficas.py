@@ -1,18 +1,18 @@
 import logging
-from typing import Optional, List
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from core.database import execute_query
 from core.cache_manager import CACHE_TTL_STATIC
-from utils.helpers import safe_round, build_full_name
-from models.schemas import CuencaData, CuencaStatsResponse
+from utils.helpers import safe_round
 
 router = APIRouter()
+
 
 @router.get(
     "/cuencas",
     tags=["Cuencas Hidrográficas"],
     summary="Listado de cuencas hidrográficas",
-    description="Obtiene el listado completo de cuencas, subcuencas y subsubcuencas hidrográficas con sus códigos, nombres y región asociada."
+    description="Obtiene el listado completo de cuencas, subcuencas y subsubcuencas hidrográficas con sus códigos, nombres y región asociada.",
 )
 async def get_unique_cuencas():
     """Obtiene cuencas, subcuencas y subsubcuencas únicas"""
@@ -36,14 +36,15 @@ async def get_unique_cuencas():
         return {
             "cuencas": [
                 {
-                    "cod_cuenca": r.get('cod_cuenca'),
-                    "nom_cuenca": r.get('nom_cuenca'),
-                    "cod_region": r.get('cod_region'),
-                    "cod_subcuenca": r.get('cod_subcuenca'),
-                    "nom_subcuenca": r.get('nom_subcuenca'),
-                    "cod_subsubcuenca": r.get('cod_subsubcuenca'),
-                    "nom_subsubcuenca": r.get('nom_subsubcuenca')
-                } for r in results
+                    "cod_cuenca": r.get("cod_cuenca"),
+                    "nom_cuenca": r.get("nom_cuenca"),
+                    "cod_region": r.get("cod_region"),
+                    "cod_subcuenca": r.get("cod_subcuenca"),
+                    "nom_subcuenca": r.get("nom_subcuenca"),
+                    "cod_subsubcuenca": r.get("cod_subsubcuenca"),
+                    "nom_subsubcuenca": r.get("nom_subsubcuenca"),
+                }
+                for r in results
             ]
         }
     except Exception as e:
@@ -55,7 +56,7 @@ async def get_unique_cuencas():
     "/shacs",
     tags=["Cuencas Hidrográficas"],
     summary="Listado de sectores SHAC",
-    description="Obtiene el listado de Sectores Hidrogeológicos de Aprovechamiento Común (SHAC) con total de puntos."
+    description="Obtiene el listado de Sectores Hidrogeológicos de Aprovechamiento Común (SHAC) con total de puntos.",
 )
 async def get_shacs(
     region: Optional[int] = Query(None, description="Código de región"),
@@ -93,8 +94,9 @@ async def get_shacs(
                 {
                     "cod_sector_sha": r.get("cod_sector_sha"),
                     "sector_sha": r.get("sector_sha"),
-                    "total_puntos": r.get("total_puntos", 0)
-                } for r in results
+                    "total_puntos": r.get("total_puntos", 0),
+                }
+                for r in results
             ]
         }
     except Exception as e:
@@ -106,7 +108,7 @@ async def get_shacs(
     "/juntas",
     tags=["Cuencas Hidrográficas"],
     summary="Listado de Juntas de Vigilancia",
-    description="Obtiene el listado de Juntas de Vigilancia con total de puntos asociados."
+    description="Obtiene el listado de Juntas de Vigilancia con total de puntos asociados.",
 )
 async def get_juntas(
     region: Optional[int] = Query(None, description="Código de región"),
@@ -142,8 +144,9 @@ async def get_juntas(
             "juntas": [
                 {
                     "id_junta": r.get("id_junta"),
-                    "total_puntos": r.get("total_puntos", 0)
-                } for r in results
+                    "total_puntos": r.get("total_puntos", 0),
+                }
+                for r in results
             ]
         }
     except Exception as e:
@@ -155,7 +158,7 @@ async def get_juntas(
     "/filtrosreactivos",
     tags=["Cuencas Hidrográficas"],
     summary="Estadísticas de caudal para filtros reactivos",
-    description="Obtiene estadísticas de caudal mínimo y máximo agregadas globalmente, por cuenca y por subcuenca. Usado para configurar filtros reactivos en el frontend."
+    description="Obtiene estadísticas de caudal mínimo y máximo agregadas globalmente, por cuenca y por subcuenca. Usado para configurar filtros reactivos en el frontend.",
 )
 async def get_filtros_reactivos():
     """Obtiene estadísticas de caudal para filtros reactivos desde tabla pre-agregada"""
@@ -187,51 +190,62 @@ async def get_filtros_reactivos():
         subcuenca_stats = []
 
         for r in results:
-            nivel = r.get('nivel')
-            if nivel == 'global':
+            nivel = r.get("nivel")
+            if nivel == "global":
                 global_stats = {
-                    "avgMin": safe_round(r.get('avgMin')),
-                    "avgMax": safe_round(r.get('avgMax')),
-                    "total_puntos_unicos": r.get('total_puntos', 0)
+                    "avgMin": safe_round(r.get("avgMin")),
+                    "avgMax": safe_round(r.get("avgMax")),
+                    "total_puntos_unicos": r.get("total_puntos", 0),
                 }
-            elif nivel == 'cuenca':
-                cuenca_stats.append({
-                    "nom_cuenca": r.get('nom_cuenca'),
-                    "avgMin": safe_round(r.get('avgMin')),
-                    "avgMax": safe_round(r.get('avgMax')),
-                    "total_puntos": r.get('total_puntos', 0)
-                })
-            elif nivel == 'subcuenca':
-                subcuenca_stats.append({
-                    "nom_cuenca": r.get('nom_cuenca'),
-                    "nom_subcuenca": r.get('nom_subcuenca'),
-                    "avgMin": safe_round(r.get('avgMin')),
-                    "avgMax": safe_round(r.get('avgMax')),
-                    "total_puntos": r.get('total_puntos', 0)
-                })
+            elif nivel == "cuenca":
+                cuenca_stats.append(
+                    {
+                        "nom_cuenca": r.get("nom_cuenca"),
+                        "avgMin": safe_round(r.get("avgMin")),
+                        "avgMax": safe_round(r.get("avgMax")),
+                        "total_puntos": r.get("total_puntos", 0),
+                    }
+                )
+            elif nivel == "subcuenca":
+                subcuenca_stats.append(
+                    {
+                        "nom_cuenca": r.get("nom_cuenca"),
+                        "nom_subcuenca": r.get("nom_subcuenca"),
+                        "avgMin": safe_round(r.get("avgMin")),
+                        "avgMax": safe_round(r.get("avgMax")),
+                        "total_puntos": r.get("total_puntos", 0),
+                    }
+                )
 
         return {
             "estadisticas": {
                 "caudal_global": global_stats,
                 "caudal_por_cuenca": cuenca_stats,
-                "caudal_por_subcuenca": subcuenca_stats
+                "caudal_por_subcuenca": subcuenca_stats,
             }
         }
     except Exception as e:
         logging.error(f"Error in get_filtros_reactivos: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
+
 @router.get(
     "/cuencas/stats",
     tags=["Cuencas Hidrográficas"],
     summary="Estadísticas de caudal por cuenca",
-    description="Obtiene estadísticas de caudal agregadas por cuenca, subcuenca o subsubcuenca. Incluye caudal promedio, mínimo, máximo, total de puntos y mediciones. Opcionalmente incluye estadísticas globales del sistema."
+    description="Obtiene estadísticas de caudal agregadas por cuenca, subcuenca o subsubcuenca. Incluye caudal promedio, mínimo, máximo, total de puntos y mediciones. Opcionalmente incluye estadísticas globales del sistema.",
 )
 async def get_cuencas_stats(
-    cod_cuenca: Optional[int] = Query(None, description="Código de cuenca", example=101),
-    cod_subcuenca: Optional[int] = Query(None, description="Código de subcuenca", example=10101),
+    cod_cuenca: Optional[int] = Query(
+        None, description="Código de cuenca", example=101
+    ),
+    cod_subcuenca: Optional[int] = Query(
+        None, description="Código de subcuenca", example=10101
+    ),
     cod_subsubcuenca: Optional[int] = Query(None, description="Código de subsubcuenca"),
-    include_global: bool = Query(False, description="Incluir estadísticas globales del sistema completo")
+    include_global: bool = Query(
+        False, description="Incluir estadísticas globales del sistema completo"
+    ),
 ):
     """Obtiene estadísticas de caudal por cuenca, subcuenca o subsubcuenca desde tabla pre-agregada"""
     try:
@@ -296,29 +310,33 @@ async def get_cuencas_stats(
         estadisticas = []
         for r in results:
             stat = {
-                "cod_cuenca": r.get('Cod_Cuenca'),
-                "nom_cuenca": r.get('Nom_Cuenca'),
-                "cod_region": r.get('Cod_Region'),
-                "cod_subcuenca": r.get('Cod_Subcuenca'),
-                "nom_subcuenca": r.get('Nom_Subcuenca'),
-                "cod_subsubcuenca": r.get('Cod_Subsubcuenca'),
-                "nom_subsubcuenca": r.get('Nom_Subsubcuenca'),
-                "caudal_promedio": safe_round(r.get('caudal_promedio')),
-                "caudal_minimo": safe_round(r.get('caudal_minimo')),
-                "caudal_maximo": safe_round(r.get('caudal_maximo')),
+                "cod_cuenca": r.get("Cod_Cuenca"),
+                "nom_cuenca": r.get("Nom_Cuenca"),
+                "cod_region": r.get("Cod_Region"),
+                "cod_subcuenca": r.get("Cod_Subcuenca"),
+                "nom_subcuenca": r.get("Nom_Subcuenca"),
+                "cod_subsubcuenca": r.get("Cod_Subsubcuenca"),
+                "nom_subsubcuenca": r.get("Nom_Subsubcuenca"),
+                "caudal_promedio": safe_round(r.get("caudal_promedio")),
+                "caudal_minimo": safe_round(r.get("caudal_minimo")),
+                "caudal_maximo": safe_round(r.get("caudal_maximo")),
                 # La columna existe en dw.Cuenca_Stats pero no se estaba
                 # seleccionando: el frontend recibía undefined y su `|| 0`
                 # dejaba la desviación estándar en cero para toda cuenca.
-                "caudal_desviacion_estandar": safe_round(r.get('caudal_desviacion_estandar')),
-                "total_puntos_unicos": r.get('total_puntos_unicos', 0),
-                "total_mediciones": r.get('total_mediciones', 0)
+                "caudal_desviacion_estandar": safe_round(
+                    r.get("caudal_desviacion_estandar")
+                ),
+                "total_puntos_unicos": r.get("total_puntos_unicos", 0),
+                "total_mediciones": r.get("total_mediciones", 0),
             }
 
             # Add global stats only if requested
             if include_global:
-                stat["global_promedio"] = safe_round(global_stats.get('global_promedio'))
-                stat["global_minimo"] = safe_round(global_stats.get('global_minimo'))
-                stat["global_maximo"] = safe_round(global_stats.get('global_maximo'))
+                stat["global_promedio"] = safe_round(
+                    global_stats.get("global_promedio")
+                )
+                stat["global_minimo"] = safe_round(global_stats.get("global_minimo"))
+                stat["global_maximo"] = safe_round(global_stats.get("global_maximo"))
 
             estadisticas.append(stat)
 
@@ -327,4 +345,3 @@ async def get_cuencas_stats(
     except Exception as e:
         logging.error(f"Error in get_cuencas_stats: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
-

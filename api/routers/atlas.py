@@ -1,17 +1,16 @@
 import logging
-from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from core.database import execute_query
 from core.cache_manager import CACHE_TTL_STATIC
-from utils.helpers import safe_round, build_full_name
 
 router = APIRouter()
+
 
 @router.get(
     "/atlas",
     tags=["Atlas"],
     summary="Divisiones administrativas de Chile",
-    description="Obtiene el listado de divisiones administrativas disponibles: regiones, provincias y comunas."
+    description="Obtiene el listado de divisiones administrativas disponibles: regiones, provincias y comunas.",
 )
 async def get_atlas():
     """Obtiene regiones, provincias y comunas únicas"""
@@ -32,13 +31,13 @@ async def get_atlas():
         return {
             "divisiones": [
                 {
-                    "region": r.get('region'),
-                    "provincia": r.get('provincia'),
-                    "comuna": r.get('comuna')
-                } for r in results
+                    "region": r.get("region"),
+                    "provincia": r.get("provincia"),
+                    "comuna": r.get("comuna"),
+                }
+                for r in results
             ]
         }
     except Exception as e:
         logging.error(f"Error in get_atlas: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
-

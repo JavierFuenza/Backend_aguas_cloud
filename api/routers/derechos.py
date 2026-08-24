@@ -10,8 +10,18 @@ TIPO_DERECHO_LABELS = {
 }
 
 MESES = [
-    "enero", "febrero", "marzo", "abril", "mayo", "junio",
-    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"
+    "enero",
+    "febrero",
+    "marzo",
+    "abril",
+    "mayo",
+    "junio",
+    "julio",
+    "agosto",
+    "septiembre",
+    "octubre",
+    "noviembre",
+    "diciembre",
 ]
 
 COLUMNAS_CAUDAL_PUNTOS = [f"CAUDAL_{m.upper()}" for m in MESES]
@@ -22,7 +32,7 @@ COLUMNAS_CAUDAL_CUENCAS = [f"caudal_{m}_sum" for m in MESES]
     "/puntos/derechos",
     tags=["Derechos de Agua"],
     summary="Derechos de agua de un punto",
-    description="Devuelve tipo de derecho, volumen anual y caudal mensual autorizado para un punto (UTM)."
+    description="Devuelve tipo de derecho, volumen anual y caudal mensual autorizado para un punto (UTM).",
 )
 async def get_punto_derechos(
     utm_norte: int = Query(..., description="Coordenada UTM Norte"),
@@ -75,7 +85,9 @@ async def get_punto_derechos(
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
     if not rows:
-        raise HTTPException(status_code=404, detail="No se encontraron derechos para este punto")
+        raise HTTPException(
+            status_code=404, detail="No se encontraron derechos para este punto"
+        )
 
     if origen == "mediciones_full":
         logging.warning(
@@ -90,15 +102,15 @@ async def get_punto_derechos(
         # Sin dato ≠ código no reconocido: una obra puede tener volumen y caudal
         # registrados con TIPO_DERECHO nulo (ver respaldo de abajo).
         "tipo_derecho_label": (
-            "No informado" if tipo is None
+            "No informado"
+            if tipo is None
             else TIPO_DERECHO_LABELS.get(tipo, "Desconocido")
         ),
         "volumen_anual": row.get("VOLUMEN_ANUAL"),
         "caudal_mensual": {
-            mes: row.get(col)
-            for mes, col in zip(MESES, COLUMNAS_CAUDAL_PUNTOS)
+            mes: row.get(col) for mes, col in zip(MESES, COLUMNAS_CAUDAL_PUNTOS)
         },
-        "origen_datos": origen
+        "origen_datos": origen,
     }
 
 
@@ -132,16 +144,19 @@ async def get_cuenca_derechos(
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
     if not rows or rows[0].get("puntos_con_derechos") == 0:
-        return {"puntos_con_derechos": 0, "volumen_anual_total": 0, "caudal_mensual_suma": {m: 0 for m in MESES}}
+        return {
+            "puntos_con_derechos": 0,
+            "volumen_anual_total": 0,
+            "caudal_mensual_suma": {m: 0 for m in MESES},
+        }
 
     row = rows[0]
     return {
         "puntos_con_derechos": row.get("puntos_con_derechos", 0),
         "volumen_anual_total": row.get("volumen_anual_total", 0),
         "caudal_mensual_suma": {
-            mes: row.get(col, 0)
-            for mes, col in zip(MESES, COLUMNAS_CAUDAL_CUENCAS)
-        }
+            mes: row.get(col, 0) for mes, col in zip(MESES, COLUMNAS_CAUDAL_CUENCAS)
+        },
     }
 
 
@@ -156,20 +171,25 @@ async def get_subcuenca_derechos(
 ):
     query = _build_cuenca_stats_query("Cod_Cuenca = ? AND Cod_Subcuenca = ?")
     try:
-        rows = await execute_query(query, params=[cod_cuenca, cod_subcuenca], use_cache=False)
+        rows = await execute_query(
+            query, params=[cod_cuenca, cod_subcuenca], use_cache=False
+        )
     except Exception as e:
         logging.error(f"Error get_subcuenca_derechos: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
     if not rows or rows[0].get("puntos_con_derechos") == 0:
-        return {"puntos_con_derechos": 0, "volumen_anual_total": 0, "caudal_mensual_suma": {m: 0 for m in MESES}}
+        return {
+            "puntos_con_derechos": 0,
+            "volumen_anual_total": 0,
+            "caudal_mensual_suma": {m: 0 for m in MESES},
+        }
 
     row = rows[0]
     return {
         "puntos_con_derechos": row.get("puntos_con_derechos", 0),
         "volumen_anual_total": row.get("volumen_anual_total", 0),
         "caudal_mensual_suma": {
-            mes: row.get(col, 0)
-            for mes, col in zip(MESES, COLUMNAS_CAUDAL_CUENCAS)
-        }
+            mes: row.get(col, 0) for mes, col in zip(MESES, COLUMNAS_CAUDAL_CUENCAS)
+        },
     }

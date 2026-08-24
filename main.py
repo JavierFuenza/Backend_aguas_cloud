@@ -7,9 +7,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Initialize Config
 from core.config import setup_config
+
 setup_config()
 
-import core.database as db
+import core.database as db  # noqa: E402 - requiere setup_config() ya ejecutado
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,7 +26,9 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logging.error(f"Failed to create initial connection: {e}")
 
-    logging.info(f"Connection pool initialized with {db.connection_pool.qsize()} connections")
+    logging.info(
+        f"Connection pool initialized with {db.connection_pool.qsize()} connections"
+    )
     yield
 
     # Shutdown
@@ -36,6 +40,7 @@ async def lifespan(app: FastAPI):
             break
         except Exception as e:
             logging.error(f"Error closing connection: {e}")
+
 
 tags_metadata = [
     {
@@ -85,7 +90,7 @@ app = FastAPI(
     contact={
         "name": "Aguas Transparentes",
         "url": "https://github.com/JavierFuenza/Backend_aguas_cloud",
-    }
+    },
 )
 
 _cors_env = os.getenv("CORS_ALLOW_ORIGINS", "")
@@ -97,11 +102,11 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"],
-    max_age=86400
+    max_age=86400,
 )
 
-# Include internal routers
-from api.routers import (
+# Include internal routers (después de configurar la app)
+from api.routers import (  # noqa: E402
     system,
     cache_y_rendimiento,
     puntos_de_medicion,
@@ -109,7 +114,7 @@ from api.routers import (
     series_temporales,
     atlas,
     informantes,
-    derechos
+    derechos,
 )
 
 app.include_router(system.router)

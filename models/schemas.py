@@ -1,26 +1,33 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
+
 
 # Pydantic Models for Request/Response validation
 class UTMLocation(BaseModel):
-    utm_norte: int = Field(..., ge=0, le=10000000, description="Coordenada UTM Norte (metros)")
-    utm_este: int = Field(..., ge=0, le=1000000, description="Coordenada UTM Este (metros)")
+    utm_norte: int = Field(
+        ..., ge=0, le=10000000, description="Coordenada UTM Norte (metros)"
+    )
+    utm_este: int = Field(
+        ..., ge=0, le=1000000, description="Coordenada UTM Este (metros)"
+    )
 
     class Config:
-        json_schema_extra = {
-            "example": {
-                "utm_norte": 6300000,
-                "utm_este": 350000
-            }
-        }
+        json_schema_extra = {"example": {"utm_norte": 6300000, "utm_este": 350000}}
+
 
 class PuntoResponse(BaseModel):
     utm_norte: int = Field(..., description="Coordenada UTM Norte")
     utm_este: int = Field(..., description="Coordenada UTM Este")
     huso: int = Field(..., description="Huso UTM (zona)")
-    es_pozo_subterraneo: bool = Field(..., description="Indica si es un pozo subterráneo")
-    cod_subsubcuenca: Optional[int] = Field(None, description="Código de la subsubcuenca")
-    sector_sha: Optional[str] = Field(None, description="Sector Hidráulico de Aprovechamiento Común")
+    es_pozo_subterraneo: bool = Field(
+        ..., description="Indica si es un pozo subterráneo"
+    )
+    cod_subsubcuenca: Optional[int] = Field(
+        None, description="Código de la subsubcuenca"
+    )
+    sector_sha: Optional[str] = Field(
+        None, description="Sector Hidráulico de Aprovechamiento Común"
+    )
     apr: Optional[bool] = Field(None, description="Agua Potable Rural")
     id_junta: Optional[float] = Field(None, description="ID Junta de Vigilancia")
 
@@ -33,9 +40,10 @@ class PuntoResponse(BaseModel):
                 "es_pozo_subterraneo": False,
                 "sector_sha": "Lluta",
                 "apr": False,
-                "id_junta": 1.0
+                "id_junta": 1.0,
             }
         }
+
 
 class PuntoInfoResponse(BaseModel):
     utm_norte: int
@@ -51,13 +59,20 @@ class PuntoInfoResponse(BaseModel):
     nombre_subsubcuenca: Optional[str] = None
     caudal_promedio: Optional[float] = Field(None, description="Caudal promedio en l/s")
     n_mediciones: int = Field(..., description="Número de mediciones registradas")
-    sector_sha: Optional[str] = Field(None, description="Sector Hidráulico de Aprovechamiento Común")
+    sector_sha: Optional[str] = Field(
+        None, description="Sector Hidráulico de Aprovechamiento Común"
+    )
     apr: Optional[bool] = Field(None, description="Agua Potable Rural")
     id_junta: Optional[float] = Field(None, description="ID Junta de Vigilancia")
     parte_junta: Optional[bool] = None
     representa_junta: Optional[bool] = None
-    canal_transmision: Optional[int] = Field(None, description="Canal de transmisión con más mediciones en el punto")
-    canales_transmision: List[int] = Field(default_factory=list, description="Todos los canales de transmisión del punto (0=Online, 1=Archivo, 2=Formulario)")
+    canal_transmision: Optional[int] = Field(
+        None, description="Canal de transmisión con más mediciones en el punto"
+    )
+    canales_transmision: List[int] = Field(
+        default_factory=list,
+        description="Todos los canales de transmisión del punto (0=Online, 1=Archivo, 2=Formulario)",
+    )
 
     class Config:
         json_schema_extra = {
@@ -78,9 +93,10 @@ class PuntoInfoResponse(BaseModel):
                 "id_junta": 1.0,
                 "parte_junta": True,
                 "representa_junta": False,
-                "canal_transmision": 10
+                "canal_transmision": 10,
             }
         }
+
 
 class CuencaData(BaseModel):
     cod_cuenca: Optional[int] = Field(None, description="Código de cuenca")
@@ -100,9 +116,10 @@ class CuencaData(BaseModel):
                 "nom_subcuenca": "Río Lluta Alto",
                 "cod_subsubcuenca": None,
                 "nom_subsubcuenca": None,
-                "cod_region": 15
+                "cod_region": 15,
             }
         }
+
 
 class CuencaStatsResponse(BaseModel):
     cod_cuenca: Optional[int]
@@ -113,9 +130,15 @@ class CuencaStatsResponse(BaseModel):
     cod_subsubcuenca: Optional[int] = None
     nom_subsubcuenca: Optional[str] = None
     caudal_promedio: Optional[float] = Field(None, description="Caudal promedio en l/s")
-    caudal_minimo: Optional[float] = Field(None, description="Caudal mínimo registrado en l/s")
-    caudal_maximo: Optional[float] = Field(None, description="Caudal máximo registrado en l/s")
-    total_puntos_unicos: int = Field(..., description="Número de puntos únicos de medición")
+    caudal_minimo: Optional[float] = Field(
+        None, description="Caudal mínimo registrado en l/s"
+    )
+    caudal_maximo: Optional[float] = Field(
+        None, description="Caudal máximo registrado en l/s"
+    )
+    total_puntos_unicos: int = Field(
+        ..., description="Número de puntos únicos de medición"
+    )
     total_mediciones: int = Field(..., description="Número total de mediciones")
 
     class Config:
@@ -132,17 +155,26 @@ class CuencaStatsResponse(BaseModel):
                 "caudal_minimo": 5.2,
                 "caudal_maximo": 120.5,
                 "total_puntos_unicos": 15,
-                "total_mediciones": 1850
+                "total_mediciones": 1850,
             }
         }
 
+
 class TimeSeriesPoint(BaseModel):
     fecha_medicion: str = Field(..., description="Fecha de medición (ISO format)")
-    caudal: Optional[float] = Field(None, description="Caudal promedio medido en l/s (compatibilidad original)")
-    caudal_promedio: Optional[float] = Field(None, description="Caudal promedio medido en l/s")
+    caudal: Optional[float] = Field(
+        None, description="Caudal promedio medido en l/s (compatibilidad original)"
+    )
+    caudal_promedio: Optional[float] = Field(
+        None, description="Caudal promedio medido en l/s"
+    )
     caudal_sumado: Optional[float] = Field(None, description="Suma de caudales en l/s")
-    totalizador_sumado: Optional[int] = Field(None, description="Suma de totalizadores reportados")
-    totalizador_max: Optional[int] = Field(None, description="Valor máximo del totalizador reportado")
+    totalizador_sumado: Optional[int] = Field(
+        None, description="Suma de totalizadores reportados"
+    )
+    totalizador_max: Optional[int] = Field(
+        None, description="Valor máximo del totalizador reportado"
+    )
 
     class Config:
         json_schema_extra = {
@@ -152,47 +184,53 @@ class TimeSeriesPoint(BaseModel):
                 "caudal_promedio": 35.2,
                 "caudal_sumado": 105.6,
                 "totalizador_sumado": 1500000,
-                "totalizador_max": 500000
+                "totalizador_max": 500000,
             }
         }
+
 
 class AlturaTimeSeriesPoint(BaseModel):
     fecha_medicion: str = Field(..., description="Fecha de medición (ISO format)")
-    altura_linimetrica: Optional[float] = Field(None, description="Altura limnimétrica en metros")
+    altura_linimetrica: Optional[float] = Field(
+        None, description="Altura limnimétrica en metros"
+    )
 
     class Config:
         json_schema_extra = {
-            "example": {
-                "fecha_medicion": "2023-06-15",
-                "altura_linimetrica": 2.5
-            }
+            "example": {"fecha_medicion": "2023-06-15", "altura_linimetrica": 2.5}
         }
+
 
 class NivelFreaticoTimeSeriesPoint(BaseModel):
     fecha_medicion: str = Field(..., description="Fecha de medición (ISO format)")
-    nivel_freatico: Optional[float] = Field(None, description="Nivel freático en metros")
+    nivel_freatico: Optional[float] = Field(
+        None, description="Nivel freático en metros"
+    )
 
     class Config:
         json_schema_extra = {
-            "example": {
-                "fecha_medicion": "2023-06-15",
-                "nivel_freatico": 15.3
-            }
+            "example": {"fecha_medicion": "2023-06-15", "nivel_freatico": 15.3}
         }
+
 
 class InformanteResponse(BaseModel):
     nombre_completo: str = Field(..., description="Nombre completo del informante")
-    cantidad_reportes: int = Field(..., description="Cantidad de reportes emitidos por el informante")
-    ultima_fecha_medicion: Optional[str] = Field(None, description="Última fecha de medición del informante")
+    cantidad_reportes: int = Field(
+        ..., description="Cantidad de reportes emitidos por el informante"
+    )
+    ultima_fecha_medicion: Optional[str] = Field(
+        None, description="Última fecha de medición del informante"
+    )
 
     class Config:
         json_schema_extra = {
             "example": {
                 "nombre_completo": "Juan Perez",
                 "cantidad_reportes": 5,
-                "ultima_fecha_medicion": "2023-10-25 14:30:00"
+                "ultima_fecha_medicion": "2023-10-25 14:30:00",
             }
         }
+
 
 class HealthResponse(BaseModel):
     status: str = Field(..., description="Estado del servicio")
@@ -204,6 +242,6 @@ class HealthResponse(BaseModel):
             "example": {
                 "status": "healthy",
                 "message": "Water Data API is running",
-                "database": "connected"
+                "database": "connected",
             }
         }

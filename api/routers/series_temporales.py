@@ -1,18 +1,30 @@
 import logging
-from typing import Optional, List
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from core.database import execute_query
-from utils.helpers import safe_round, build_full_name
-from models.schemas import TimeSeriesPoint, AlturaTimeSeriesPoint, NivelFreaticoTimeSeriesPoint
 
 router = APIRouter()
 
-@router.get("/cuencas/cuenca/series_de_tiempo/caudal", tags=["Series Temporales"], summary="Serie temporal de caudal por cuenca")
+
+@router.get(
+    "/cuencas/cuenca/series_de_tiempo/caudal",
+    tags=["Series Temporales"],
+    summary="Serie temporal de caudal por cuenca",
+)
 async def get_caudal_por_tiempo_por_cuenca(
-    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31"),
-    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción: True (subterránea), False (superficial)")
+    cuenca_identificador: str = Query(
+        ..., description="Código numérico o nombre de la cuenca", example="101"
+    ),
+    fecha_inicio: Optional[str] = Query(
+        None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"
+    ),
+    fecha_fin: Optional[str] = Query(
+        None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31"
+    ),
+    pozo: Optional[bool] = Query(
+        None,
+        description="Filtrar por tipo de extracción: True (subterránea), False (superficial)",
+    ),
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -22,7 +34,11 @@ async def get_caudal_por_tiempo_por_cuenca(
             subquery_filter = "s.NOM_CUENCA = ?"
             params = [cuenca_identificador]
 
-        join_puntos = "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este" if pozo is not None else ""
+        join_puntos = (
+            "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este"
+            if pozo is not None
+            else ""
+        )
 
         query = f"""
         SELECT 
@@ -49,23 +65,46 @@ async def get_caudal_por_tiempo_por_cuenca(
 
         results = await execute_query(query, params)
 
-        caudal_por_tiempo = [{
-            "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, 
-            "caudal": r.get("caudal_promedio"),
-            "caudal_promedio": r.get("caudal_promedio"),
-            "caudal_sumado": r.get("caudal_sumado"),
-            "totalizador_sumado": r.get("totalizador_sumado"),
-            "totalizador_max": r.get("totalizador_max")
-        } for r in results] if results else []
-        return {"cuenca_identificador": cuenca_identificador, "total_registros": len(caudal_por_tiempo), "caudal_por_tiempo": caudal_por_tiempo}
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
+        caudal_por_tiempo = (
+            [
+                {
+                    "fecha_medicion": (
+                        str(r["fecha_medicion"]) if r.get("fecha_medicion") else None
+                    ),
+                    "caudal": r.get("caudal_promedio"),
+                    "caudal_promedio": r.get("caudal_promedio"),
+                    "caudal_sumado": r.get("caudal_sumado"),
+                    "totalizador_sumado": r.get("totalizador_sumado"),
+                    "totalizador_max": r.get("totalizador_max"),
+                }
+                for r in results
+            ]
+            if results
+            else []
+        )
+        return {
+            "cuenca_identificador": cuenca_identificador,
+            "total_registros": len(caudal_por_tiempo),
+            "caudal_por_tiempo": caudal_por_tiempo,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@router.get("/cuencas/cuenca/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"], summary="Serie temporal de altura limnimétrica por cuenca")
+
+@router.get(
+    "/cuencas/cuenca/series_de_tiempo/altura_linimetrica",
+    tags=["Series Temporales"],
+    summary="Serie temporal de altura limnimétrica por cuenca",
+)
 async def get_altura_linimetrica_por_tiempo_por_cuenca(
-    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None),
-    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
+    cuenca_identificador: str = Query(
+        ..., description="Código numérico o nombre de la cuenca", example="101"
+    ),
+    fecha_inicio: Optional[str] = Query(None),
+    fecha_fin: Optional[str] = Query(None),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción"),
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -75,7 +114,11 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
             subquery_filter = "s.NOM_CUENCA = ?"
             params = [cuenca_identificador]
 
-        join_puntos = "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este" if pozo is not None else ""
+        join_puntos = (
+            "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este"
+            if pozo is not None
+            else ""
+        )
 
         query = f"""
         SELECT s.FECHA_MEDICION AS fecha_medicion, AVG(CAST(s.ALTURA_LIMNIMETRICA AS FLOAT)) AS altura_linimetrica
@@ -96,17 +139,43 @@ async def get_altura_linimetrica_por_tiempo_por_cuenca(
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
         results = await execute_query(query, params)
-        
-        altura_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "altura_linimetrica": r["altura_linimetrica"]} for r in results] if results else []
-        return {"cuenca_identificador": cuenca_identificador, "total_registros": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@router.get("/cuencas/cuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"], summary="Serie temporal de nivel freático por cuenca")
+        altura_por_tiempo = (
+            [
+                {
+                    "fecha_medicion": (
+                        str(r["fecha_medicion"]) if r.get("fecha_medicion") else None
+                    ),
+                    "altura_linimetrica": r["altura_linimetrica"],
+                }
+                for r in results
+            ]
+            if results
+            else []
+        )
+        return {
+            "cuenca_identificador": cuenca_identificador,
+            "total_registros": len(altura_por_tiempo),
+            "altura_por_tiempo": altura_por_tiempo,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+
+@router.get(
+    "/cuencas/cuenca/series_de_tiempo/nivel_freatico",
+    tags=["Series Temporales"],
+    summary="Serie temporal de nivel freático por cuenca",
+)
 async def get_nivel_freatico_por_tiempo_por_cuenca(
-    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la cuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None),
-    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
+    cuenca_identificador: str = Query(
+        ..., description="Código numérico o nombre de la cuenca", example="101"
+    ),
+    fecha_inicio: Optional[str] = Query(None),
+    fecha_fin: Optional[str] = Query(None),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción"),
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -116,7 +185,11 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
             subquery_filter = "s.NOM_CUENCA = ?"
             params = [cuenca_identificador]
 
-        join_puntos = "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este" if pozo is not None else ""
+        join_puntos = (
+            "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este"
+            if pozo is not None
+            else ""
+        )
 
         query = f"""
         SELECT s.FECHA_MEDICION AS fecha_medicion, AVG(CAST(s.NIVEL_FREATICO AS FLOAT)) AS nivel_freatico
@@ -137,18 +210,50 @@ async def get_nivel_freatico_por_tiempo_por_cuenca(
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
         results = await execute_query(query, params)
-        
-        nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results] if results else []
-        return {"cuenca_identificador": cuenca_identificador, "total_registros": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@router.get("/cuencas/subcuenca/series_de_tiempo/caudal", tags=["Series Temporales"], summary="Serie temporal de caudal por subcuenca")
+        nivel_por_tiempo = (
+            [
+                {
+                    "fecha_medicion": (
+                        str(r["fecha_medicion"]) if r.get("fecha_medicion") else None
+                    ),
+                    "nivel_freatico": r["nivel_freatico"],
+                }
+                for r in results
+            ]
+            if results
+            else []
+        )
+        return {
+            "cuenca_identificador": cuenca_identificador,
+            "total_registros": len(nivel_por_tiempo),
+            "nivel_por_tiempo": nivel_por_tiempo,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+
+@router.get(
+    "/cuencas/subcuenca/series_de_tiempo/caudal",
+    tags=["Series Temporales"],
+    summary="Serie temporal de caudal por subcuenca",
+)
 async def get_caudal_por_tiempo_por_subcuenca(
-    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subcuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31"),
-    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción: True (subterránea), False (superficial)")
+    cuenca_identificador: str = Query(
+        ..., description="Código numérico o nombre de la subcuenca", example="101"
+    ),
+    fecha_inicio: Optional[str] = Query(
+        None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"
+    ),
+    fecha_fin: Optional[str] = Query(
+        None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31"
+    ),
+    pozo: Optional[bool] = Query(
+        None,
+        description="Filtrar por tipo de extracción: True (subterránea), False (superficial)",
+    ),
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -158,7 +263,11 @@ async def get_caudal_por_tiempo_por_subcuenca(
             subquery_filter = "s.NOM_SUBCUENCA = ?"
             params = [cuenca_identificador]
 
-        join_puntos = "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este" if pozo is not None else ""
+        join_puntos = (
+            "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este"
+            if pozo is not None
+            else ""
+        )
 
         query = f"""
         SELECT 
@@ -185,23 +294,46 @@ async def get_caudal_por_tiempo_por_subcuenca(
 
         results = await execute_query(query, params)
 
-        caudal_por_tiempo = [{
-            "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, 
-            "caudal": r.get("caudal_promedio"),
-            "caudal_promedio": r.get("caudal_promedio"),
-            "caudal_sumado": r.get("caudal_sumado"),
-            "totalizador_sumado": r.get("totalizador_sumado"),
-            "totalizador_max": r.get("totalizador_max")
-        } for r in results] if results else []
-        return {"subcuenca_identificador": cuenca_identificador, "total_registros": len(caudal_por_tiempo), "caudal_por_tiempo": caudal_por_tiempo}
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
+        caudal_por_tiempo = (
+            [
+                {
+                    "fecha_medicion": (
+                        str(r["fecha_medicion"]) if r.get("fecha_medicion") else None
+                    ),
+                    "caudal": r.get("caudal_promedio"),
+                    "caudal_promedio": r.get("caudal_promedio"),
+                    "caudal_sumado": r.get("caudal_sumado"),
+                    "totalizador_sumado": r.get("totalizador_sumado"),
+                    "totalizador_max": r.get("totalizador_max"),
+                }
+                for r in results
+            ]
+            if results
+            else []
+        )
+        return {
+            "subcuenca_identificador": cuenca_identificador,
+            "total_registros": len(caudal_por_tiempo),
+            "caudal_por_tiempo": caudal_por_tiempo,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@router.get("/cuencas/subcuenca/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"], summary="Serie temporal de altura limnimétrica por subcuenca")
+
+@router.get(
+    "/cuencas/subcuenca/series_de_tiempo/altura_linimetrica",
+    tags=["Series Temporales"],
+    summary="Serie temporal de altura limnimétrica por subcuenca",
+)
 async def get_altura_linimetrica_por_tiempo_por_subcuenca(
-    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subcuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None),
-    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
+    cuenca_identificador: str = Query(
+        ..., description="Código numérico o nombre de la subcuenca", example="101"
+    ),
+    fecha_inicio: Optional[str] = Query(None),
+    fecha_fin: Optional[str] = Query(None),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción"),
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -211,7 +343,11 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
             subquery_filter = "s.NOM_SUBCUENCA = ?"
             params = [cuenca_identificador]
 
-        join_puntos = "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este" if pozo is not None else ""
+        join_puntos = (
+            "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este"
+            if pozo is not None
+            else ""
+        )
 
         query = f"""
         SELECT s.FECHA_MEDICION AS fecha_medicion, AVG(CAST(s.ALTURA_LIMNIMETRICA AS FLOAT)) AS altura_linimetrica
@@ -232,17 +368,43 @@ async def get_altura_linimetrica_por_tiempo_por_subcuenca(
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
         results = await execute_query(query, params)
-        
-        altura_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "altura_linimetrica": r["altura_linimetrica"]} for r in results] if results else []
-        return {"subcuenca_identificador": cuenca_identificador, "total_registros": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@router.get("/cuencas/subcuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"], summary="Serie temporal de nivel freático por subcuenca")
+        altura_por_tiempo = (
+            [
+                {
+                    "fecha_medicion": (
+                        str(r["fecha_medicion"]) if r.get("fecha_medicion") else None
+                    ),
+                    "altura_linimetrica": r["altura_linimetrica"],
+                }
+                for r in results
+            ]
+            if results
+            else []
+        )
+        return {
+            "subcuenca_identificador": cuenca_identificador,
+            "total_registros": len(altura_por_tiempo),
+            "altura_por_tiempo": altura_por_tiempo,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+
+@router.get(
+    "/cuencas/subcuenca/series_de_tiempo/nivel_freatico",
+    tags=["Series Temporales"],
+    summary="Serie temporal de nivel freático por subcuenca",
+)
 async def get_nivel_freatico_por_tiempo_por_subcuenca(
-    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subcuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None),
-    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
+    cuenca_identificador: str = Query(
+        ..., description="Código numérico o nombre de la subcuenca", example="101"
+    ),
+    fecha_inicio: Optional[str] = Query(None),
+    fecha_fin: Optional[str] = Query(None),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción"),
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -252,7 +414,11 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
             subquery_filter = "s.NOM_SUBCUENCA = ?"
             params = [cuenca_identificador]
 
-        join_puntos = "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este" if pozo is not None else ""
+        join_puntos = (
+            "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este"
+            if pozo is not None
+            else ""
+        )
 
         query = f"""
         SELECT s.FECHA_MEDICION AS fecha_medicion, AVG(CAST(s.NIVEL_FREATICO AS FLOAT)) AS nivel_freatico
@@ -273,18 +439,50 @@ async def get_nivel_freatico_por_tiempo_por_subcuenca(
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
         results = await execute_query(query, params)
-        
-        nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results] if results else []
-        return {"subcuenca_identificador": cuenca_identificador, "total_registros": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@router.get("/cuencas/subsubcuenca/series_de_tiempo/caudal", tags=["Series Temporales"], summary="Serie temporal de caudal por subsubcuenca")
+        nivel_por_tiempo = (
+            [
+                {
+                    "fecha_medicion": (
+                        str(r["fecha_medicion"]) if r.get("fecha_medicion") else None
+                    ),
+                    "nivel_freatico": r["nivel_freatico"],
+                }
+                for r in results
+            ]
+            if results
+            else []
+        )
+        return {
+            "subcuenca_identificador": cuenca_identificador,
+            "total_registros": len(nivel_por_tiempo),
+            "nivel_por_tiempo": nivel_por_tiempo,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+
+@router.get(
+    "/cuencas/subsubcuenca/series_de_tiempo/caudal",
+    tags=["Series Temporales"],
+    summary="Serie temporal de caudal por subsubcuenca",
+)
 async def get_caudal_por_tiempo_por_subsubcuenca(
-    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subsubcuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31"),
-    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción: True (subterránea), False (superficial)")
+    cuenca_identificador: str = Query(
+        ..., description="Código numérico o nombre de la subsubcuenca", example="101"
+    ),
+    fecha_inicio: Optional[str] = Query(
+        None, description="Fecha de inicio en formato YYYY-MM-DD", example="2023-01-01"
+    ),
+    fecha_fin: Optional[str] = Query(
+        None, description="Fecha de fin en formato YYYY-MM-DD", example="2023-12-31"
+    ),
+    pozo: Optional[bool] = Query(
+        None,
+        description="Filtrar por tipo de extracción: True (subterránea), False (superficial)",
+    ),
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -294,7 +492,11 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
             subquery_filter = "s.NOM_SUBSUBCUENCA = ?"
             params = [cuenca_identificador]
 
-        join_puntos = "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este" if pozo is not None else ""
+        join_puntos = (
+            "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este"
+            if pozo is not None
+            else ""
+        )
 
         query = f"""
         SELECT 
@@ -321,23 +523,46 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
 
         results = await execute_query(query, params)
 
-        caudal_por_tiempo = [{
-            "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, 
-            "caudal": r.get("caudal_promedio"),
-            "caudal_promedio": r.get("caudal_promedio"),
-            "caudal_sumado": r.get("caudal_sumado"),
-            "totalizador_sumado": r.get("totalizador_sumado"),
-            "totalizador_max": r.get("totalizador_max")
-        } for r in results] if results else []
-        return {"subsubcuenca_identificador": cuenca_identificador, "total_registros": len(caudal_por_tiempo), "caudal_por_tiempo": caudal_por_tiempo}
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
+        caudal_por_tiempo = (
+            [
+                {
+                    "fecha_medicion": (
+                        str(r["fecha_medicion"]) if r.get("fecha_medicion") else None
+                    ),
+                    "caudal": r.get("caudal_promedio"),
+                    "caudal_promedio": r.get("caudal_promedio"),
+                    "caudal_sumado": r.get("caudal_sumado"),
+                    "totalizador_sumado": r.get("totalizador_sumado"),
+                    "totalizador_max": r.get("totalizador_max"),
+                }
+                for r in results
+            ]
+            if results
+            else []
+        )
+        return {
+            "subsubcuenca_identificador": cuenca_identificador,
+            "total_registros": len(caudal_por_tiempo),
+            "caudal_por_tiempo": caudal_por_tiempo,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@router.get("/cuencas/subsubcuenca/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"], summary="Serie temporal de altura limnimétrica por subsubcuenca")
+
+@router.get(
+    "/cuencas/subsubcuenca/series_de_tiempo/altura_linimetrica",
+    tags=["Series Temporales"],
+    summary="Serie temporal de altura limnimétrica por subsubcuenca",
+)
 async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
-    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subsubcuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None),
-    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
+    cuenca_identificador: str = Query(
+        ..., description="Código numérico o nombre de la subsubcuenca", example="101"
+    ),
+    fecha_inicio: Optional[str] = Query(None),
+    fecha_fin: Optional[str] = Query(None),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción"),
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -347,7 +572,11 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
             subquery_filter = "s.NOM_SUBSUBCUENCA = ?"
             params = [cuenca_identificador]
 
-        join_puntos = "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este" if pozo is not None else ""
+        join_puntos = (
+            "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este"
+            if pozo is not None
+            else ""
+        )
 
         query = f"""
         SELECT s.FECHA_MEDICION AS fecha_medicion, AVG(CAST(s.ALTURA_LIMNIMETRICA AS FLOAT)) AS altura_linimetrica
@@ -368,17 +597,43 @@ async def get_altura_linimetrica_por_tiempo_por_subsubcuenca(
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
         results = await execute_query(query, params)
-        
-        altura_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "altura_linimetrica": r["altura_linimetrica"]} for r in results] if results else []
-        return {"subsubcuenca_identificador": cuenca_identificador, "total_registros": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@router.get("/cuencas/subsubcuenca/series_de_tiempo/nivel_freatico", tags=["Series Temporales"], summary="Serie temporal de nivel freático por subsubcuenca")
+        altura_por_tiempo = (
+            [
+                {
+                    "fecha_medicion": (
+                        str(r["fecha_medicion"]) if r.get("fecha_medicion") else None
+                    ),
+                    "altura_linimetrica": r["altura_linimetrica"],
+                }
+                for r in results
+            ]
+            if results
+            else []
+        )
+        return {
+            "subsubcuenca_identificador": cuenca_identificador,
+            "total_registros": len(altura_por_tiempo),
+            "altura_por_tiempo": altura_por_tiempo,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+
+@router.get(
+    "/cuencas/subsubcuenca/series_de_tiempo/nivel_freatico",
+    tags=["Series Temporales"],
+    summary="Serie temporal de nivel freático por subsubcuenca",
+)
 async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
-    cuenca_identificador: str = Query(..., description="Código numérico o nombre de la subsubcuenca", example="101"),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None),
-    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
+    cuenca_identificador: str = Query(
+        ..., description="Código numérico o nombre de la subsubcuenca", example="101"
+    ),
+    fecha_inicio: Optional[str] = Query(None),
+    fecha_fin: Optional[str] = Query(None),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción"),
 ):
     try:
         if cuenca_identificador.isdigit():
@@ -388,7 +643,11 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
             subquery_filter = "s.NOM_SUBSUBCUENCA = ?"
             params = [cuenca_identificador]
 
-        join_puntos = "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este" if pozo is not None else ""
+        join_puntos = (
+            "INNER JOIN dw.Puntos_Mapa p ON s.UTM_NORTE = p.UTM_Norte AND s.UTM_ESTE = p.UTM_Este"
+            if pozo is not None
+            else ""
+        )
 
         query = f"""
         SELECT s.FECHA_MEDICION AS fecha_medicion, AVG(CAST(s.NIVEL_FREATICO AS FLOAT)) AS nivel_freatico
@@ -409,22 +668,48 @@ async def get_nivel_freatico_por_tiempo_por_subsubcuenca(
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
         results = await execute_query(query, params)
-        
-        nivel_por_tiempo = [{"fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None, "nivel_freatico": r["nivel_freatico"]} for r in results] if results else []
-        return {"subsubcuenca_identificador": cuenca_identificador, "total_registros": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@router.get("/cuencas/shac/series_de_tiempo/caudal", 
-    tags=["Series Temporales"], 
+        nivel_por_tiempo = (
+            [
+                {
+                    "fecha_medicion": (
+                        str(r["fecha_medicion"]) if r.get("fecha_medicion") else None
+                    ),
+                    "nivel_freatico": r["nivel_freatico"],
+                }
+                for r in results
+            ]
+            if results
+            else []
+        )
+        return {
+            "subsubcuenca_identificador": cuenca_identificador,
+            "total_registros": len(nivel_por_tiempo),
+            "nivel_por_tiempo": nivel_por_tiempo,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+
+@router.get(
+    "/cuencas/shac/series_de_tiempo/caudal",
+    tags=["Series Temporales"],
     summary="Serie temporal de caudal por SHAC",
-    description="Obtiene la serie temporal de caudal usando dw.Series_tiempo con caudales sumados y totalizadores agrupados por Sector Hidrogeológico de Aprovechamiento Común (SHAC)."
+    description="Obtiene la serie temporal de caudal usando dw.Series_tiempo con caudales sumados y totalizadores agrupados por Sector Hidrogeológico de Aprovechamiento Común (SHAC).",
 )
 async def get_caudal_por_tiempo_por_shac(
-    shac_identificador: str = Query(..., description="Código o nombre del SHAC", example="121"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD"),
-    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
+    shac_identificador: str = Query(
+        ..., description="Código o nombre del SHAC", example="121"
+    ),
+    fecha_inicio: Optional[str] = Query(
+        None, description="Fecha de inicio en formato YYYY-MM-DD"
+    ),
+    fecha_fin: Optional[str] = Query(
+        None, description="Fecha de fin en formato YYYY-MM-DD"
+    ),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción"),
 ):
     try:
         if shac_identificador.isdigit():
@@ -452,30 +737,35 @@ async def get_caudal_por_tiempo_por_shac(
         if fecha_inicio:
             query += " AND s.FECHA_MEDICION >= ?"
             params.append(fecha_inicio)
-            
+
         if fecha_fin:
             query += " AND s.FECHA_MEDICION <= ?"
             params.append(fecha_fin)
-            
+
         if pozo is not None:
             query += " AND p.es_pozo_subterraneo = ?"
             params.append(1 if pozo else 0)
-            
+
         query += " GROUP BY s.FECHA_MEDICION ORDER BY s.FECHA_MEDICION DESC"
 
         results = await execute_query(query, params)
 
         if not results:
-            raise HTTPException(status_code=404, detail="No se encontraron datos de caudal para el período o SHAC especificado.")
+            raise HTTPException(
+                status_code=404,
+                detail="No se encontraron datos de caudal para el período o SHAC especificado.",
+            )
 
         caudal_por_tiempo = [
             {
-                "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None,
+                "fecha_medicion": (
+                    str(r["fecha_medicion"]) if r.get("fecha_medicion") else None
+                ),
                 "caudal": r.get("caudal_promedio"),
                 "caudal_promedio": r.get("caudal_promedio"),
                 "caudal_sumado": r.get("caudal_sumado"),
                 "totalizador_sumado": r.get("totalizador_sumado"),
-                "totalizador_max": r.get("totalizador_max")
+                "totalizador_max": r.get("totalizador_max"),
             }
             for r in results
         ]
@@ -483,7 +773,7 @@ async def get_caudal_por_tiempo_por_shac(
         return {
             "shac_identificador": shac_identificador,
             "total_registros": len(caudal_por_tiempo),
-            "caudal_por_tiempo": caudal_por_tiempo
+            "caudal_por_tiempo": caudal_por_tiempo,
         }
 
     except HTTPException:
@@ -492,15 +782,23 @@ async def get_caudal_por_tiempo_por_shac(
         logging.error(f"Error in get_caudal_por_tiempo_por_shac: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
-@router.get("/cuencas/shac/series_de_tiempo/altura_linimetrica",
+
+@router.get(
+    "/cuencas/shac/series_de_tiempo/altura_linimetrica",
     tags=["Series Temporales"],
-    summary="Serie temporal de altura limnimétrica por SHAC"
+    summary="Serie temporal de altura limnimétrica por SHAC",
 )
 async def get_altura_linimetrica_por_tiempo_por_shac(
-    shac_identificador: str = Query(..., description="Código o nombre del SHAC", example="121"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD"),
-    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
+    shac_identificador: str = Query(
+        ..., description="Código o nombre del SHAC", example="121"
+    ),
+    fecha_inicio: Optional[str] = Query(
+        None, description="Fecha de inicio en formato YYYY-MM-DD"
+    ),
+    fecha_fin: Optional[str] = Query(
+        None, description="Fecha de fin en formato YYYY-MM-DD"
+    ),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción"),
 ):
     try:
         if shac_identificador.isdigit():
@@ -536,12 +834,17 @@ async def get_altura_linimetrica_por_tiempo_por_shac(
         results = await execute_query(query, params)
 
         if not results:
-            raise HTTPException(status_code=404, detail="No se encontraron datos de altura limnimétrica para el período o SHAC especificado.")
+            raise HTTPException(
+                status_code=404,
+                detail="No se encontraron datos de altura limnimétrica para el período o SHAC especificado.",
+            )
 
         altura_por_tiempo = [
             {
-                "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None,
-                "altura_linimetrica": r.get("altura_linimetrica")
+                "fecha_medicion": (
+                    str(r["fecha_medicion"]) if r.get("fecha_medicion") else None
+                ),
+                "altura_linimetrica": r.get("altura_linimetrica"),
             }
             for r in results
         ]
@@ -549,7 +852,7 @@ async def get_altura_linimetrica_por_tiempo_por_shac(
         return {
             "shac_identificador": shac_identificador,
             "total_registros": len(altura_por_tiempo),
-            "altura_por_tiempo": altura_por_tiempo
+            "altura_por_tiempo": altura_por_tiempo,
         }
 
     except HTTPException:
@@ -559,15 +862,22 @@ async def get_altura_linimetrica_por_tiempo_por_shac(
         raise HTTPException(status_code=500, detail={"error": str(e)})
 
 
-@router.get("/cuencas/shac/series_de_tiempo/nivel_freatico",
+@router.get(
+    "/cuencas/shac/series_de_tiempo/nivel_freatico",
     tags=["Series Temporales"],
-    summary="Serie temporal de nivel freático por SHAC"
+    summary="Serie temporal de nivel freático por SHAC",
 )
 async def get_nivel_freatico_por_tiempo_por_shac(
-    shac_identificador: str = Query(..., description="Código o nombre del SHAC", example="121"),
-    fecha_inicio: Optional[str] = Query(None, description="Fecha de inicio en formato YYYY-MM-DD"),
-    fecha_fin: Optional[str] = Query(None, description="Fecha de fin en formato YYYY-MM-DD"),
-    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción")
+    shac_identificador: str = Query(
+        ..., description="Código o nombre del SHAC", example="121"
+    ),
+    fecha_inicio: Optional[str] = Query(
+        None, description="Fecha de inicio en formato YYYY-MM-DD"
+    ),
+    fecha_fin: Optional[str] = Query(
+        None, description="Fecha de fin en formato YYYY-MM-DD"
+    ),
+    pozo: Optional[bool] = Query(None, description="Filtrar por tipo de extracción"),
 ):
     try:
         if shac_identificador.isdigit():
@@ -603,12 +913,17 @@ async def get_nivel_freatico_por_tiempo_por_shac(
         results = await execute_query(query, params)
 
         if not results:
-            raise HTTPException(status_code=404, detail="No se encontraron datos de nivel freático para el período o SHAC especificado.")
+            raise HTTPException(
+                status_code=404,
+                detail="No se encontraron datos de nivel freático para el período o SHAC especificado.",
+            )
 
         nivel_por_tiempo = [
             {
-                "fecha_medicion": str(r["fecha_medicion"]) if r.get("fecha_medicion") else None,
-                "nivel_freatico": r.get("nivel_freatico")
+                "fecha_medicion": (
+                    str(r["fecha_medicion"]) if r.get("fecha_medicion") else None
+                ),
+                "nivel_freatico": r.get("nivel_freatico"),
             }
             for r in results
         ]
@@ -616,7 +931,7 @@ async def get_nivel_freatico_por_tiempo_por_shac(
         return {
             "shac_identificador": shac_identificador,
             "total_registros": len(nivel_por_tiempo),
-            "nivel_por_tiempo": nivel_por_tiempo
+            "nivel_por_tiempo": nivel_por_tiempo,
         }
 
     except HTTPException:
@@ -628,8 +943,10 @@ async def get_nivel_freatico_por_tiempo_por_shac(
 
 @router.get("/puntos/series_de_tiempo/caudal", tags=["Series Temporales"])
 async def get_caudal_por_tiempo_por_punto(
-    utm_norte: int = Query(...), utm_este: int = Query(...),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+    utm_norte: int = Query(...),
+    utm_este: int = Query(...),
+    fecha_inicio: Optional[str] = Query(None),
+    fecha_fin: Optional[str] = Query(None),
 ):
     try:
         query = """
@@ -653,23 +970,44 @@ async def get_caudal_por_tiempo_por_punto(
         query += " ORDER BY FECHA_MEDICION DESC"
 
         results = await execute_query(query, params)
-        
-        caudal_por_tiempo = [{
-            "fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, 
-            "caudal": r.get('caudal'),
-            "caudal_promedio": r.get('caudal_promedio'),
-            "caudal_sumado": r.get('caudal_sumado'),
-            "totalizador_sumado": r.get('totalizador_sumado'),
-            "totalizador_max": r.get('totalizador_max')
-        } for r in results] if results else []
-        return {"utm_norte": utm_norte, "utm_este": utm_este, "total_registros": len(caudal_por_tiempo), "caudal_por_tiempo": caudal_por_tiempo}
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
+
+        caudal_por_tiempo = (
+            [
+                {
+                    "fecha_medicion": (
+                        str(r.get("fecha_medicion"))
+                        if r.get("fecha_medicion")
+                        else None
+                    ),
+                    "caudal": r.get("caudal"),
+                    "caudal_promedio": r.get("caudal_promedio"),
+                    "caudal_sumado": r.get("caudal_sumado"),
+                    "totalizador_sumado": r.get("totalizador_sumado"),
+                    "totalizador_max": r.get("totalizador_max"),
+                }
+                for r in results
+            ]
+            if results
+            else []
+        )
+        return {
+            "utm_norte": utm_norte,
+            "utm_este": utm_este,
+            "total_registros": len(caudal_por_tiempo),
+            "caudal_por_tiempo": caudal_por_tiempo,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
 
 @router.get("/puntos/series_de_tiempo/altura_linimetrica", tags=["Series Temporales"])
 async def get_altura_linimetrica_por_tiempo_por_punto(
-    utm_norte: int = Query(...), utm_este: int = Query(...),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+    utm_norte: int = Query(...),
+    utm_este: int = Query(...),
+    fecha_inicio: Optional[str] = Query(None),
+    fecha_fin: Optional[str] = Query(None),
 ):
     try:
         count_query = "SELECT COUNT(*) as total FROM dw.Series_tiempo WHERE UTM_NORTE = ? AND UTM_ESTE = ? AND ALTURA_LIMNIMETRICA IS NOT NULL"
@@ -680,9 +1018,9 @@ async def get_altura_linimetrica_por_tiempo_por_punto(
         if fecha_fin:
             count_query += " AND FECHA_MEDICION <= ?"
             count_params.append(fecha_fin)
-            
+
         count_result = await execute_query(count_query, count_params)
-        total_count = count_result[0]['total'] if count_result else 0
+        total_count = count_result[0]["total"] if count_result else 0
 
         query = "SELECT FECHA_MEDICION as fecha_medicion, ALTURA_LIMNIMETRICA as altura_linimetrica FROM dw.Series_tiempo WHERE UTM_NORTE = ? AND UTM_ESTE = ? AND ALTURA_LIMNIMETRICA IS NOT NULL"
         params = [utm_norte, utm_este]
@@ -695,16 +1033,41 @@ async def get_altura_linimetrica_por_tiempo_por_punto(
         query += " ORDER BY FECHA_MEDICION DESC"
 
         results = await execute_query(query, params)
-        
-        altura_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "altura_linimetrica": r.get('altura_linimetrica')} for r in results] if results else []
-        return {"utm_norte": utm_norte, "utm_este": utm_este, "total_registros": total_count, "registros_retornados": len(altura_por_tiempo), "altura_por_tiempo": altura_por_tiempo}
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
+
+        altura_por_tiempo = (
+            [
+                {
+                    "fecha_medicion": (
+                        str(r.get("fecha_medicion"))
+                        if r.get("fecha_medicion")
+                        else None
+                    ),
+                    "altura_linimetrica": r.get("altura_linimetrica"),
+                }
+                for r in results
+            ]
+            if results
+            else []
+        )
+        return {
+            "utm_norte": utm_norte,
+            "utm_este": utm_este,
+            "total_registros": total_count,
+            "registros_retornados": len(altura_por_tiempo),
+            "altura_por_tiempo": altura_por_tiempo,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
 
 @router.get("/puntos/series_de_tiempo/nivel_freatico", tags=["Series Temporales"])
 async def get_nivel_freatico_por_tiempo_por_punto(
-    utm_norte: int = Query(...), utm_este: int = Query(...),
-    fecha_inicio: Optional[str] = Query(None), fecha_fin: Optional[str] = Query(None)
+    utm_norte: int = Query(...),
+    utm_este: int = Query(...),
+    fecha_inicio: Optional[str] = Query(None),
+    fecha_fin: Optional[str] = Query(None),
 ):
     try:
         count_query = "SELECT COUNT(*) as total FROM dw.Series_tiempo WHERE UTM_NORTE = ? AND UTM_ESTE = ? AND NIVEL_FREATICO IS NOT NULL"
@@ -715,9 +1078,9 @@ async def get_nivel_freatico_por_tiempo_por_punto(
         if fecha_fin:
             count_query += " AND FECHA_MEDICION <= ?"
             count_params.append(fecha_fin)
-            
+
         count_result = await execute_query(count_query, count_params)
-        total_count = count_result[0]['total'] if count_result else 0
+        total_count = count_result[0]["total"] if count_result else 0
 
         query = "SELECT FECHA_MEDICION as fecha_medicion, NIVEL_FREATICO as nivel_freatico FROM dw.Series_tiempo WHERE UTM_NORTE = ? AND UTM_ESTE = ? AND NIVEL_FREATICO IS NOT NULL"
         params = [utm_norte, utm_este]
@@ -730,8 +1093,30 @@ async def get_nivel_freatico_por_tiempo_por_punto(
         query += " ORDER BY FECHA_MEDICION DESC"
 
         results = await execute_query(query, params)
-        
-        nivel_por_tiempo = [{"fecha_medicion": str(r.get('fecha_medicion')) if r.get('fecha_medicion') else None, "nivel_freatico": r.get('nivel_freatico')} for r in results] if results else []
-        return {"utm_norte": utm_norte, "utm_este": utm_este, "total_registros": total_count, "registros_retornados": len(nivel_por_tiempo), "nivel_por_tiempo": nivel_por_tiempo}
-    except HTTPException: raise
-    except Exception as e: raise HTTPException(status_code=500, detail={"error": str(e)})
+
+        nivel_por_tiempo = (
+            [
+                {
+                    "fecha_medicion": (
+                        str(r.get("fecha_medicion"))
+                        if r.get("fecha_medicion")
+                        else None
+                    ),
+                    "nivel_freatico": r.get("nivel_freatico"),
+                }
+                for r in results
+            ]
+            if results
+            else []
+        )
+        return {
+            "utm_norte": utm_norte,
+            "utm_este": utm_este,
+            "total_registros": total_count,
+            "registros_retornados": len(nivel_por_tiempo),
+            "nivel_por_tiempo": nivel_por_tiempo,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={"error": str(e)})

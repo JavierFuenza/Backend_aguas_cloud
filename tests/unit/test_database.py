@@ -1,4 +1,3 @@
-import asyncio
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -6,6 +5,7 @@ from unittest.mock import patch, MagicMock
 def test_execute_query_is_coroutine():
     from core.database import execute_query
     import inspect
+
     assert inspect.iscoroutinefunction(execute_query)
 
 
@@ -18,9 +18,12 @@ async def test_execute_query_returns_list_of_dicts():
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = mock_cursor
 
-    with patch("core.database.get_db_connection", return_value=mock_conn), \
-         patch("core.database.return_db_connection"):
+    with (
+        patch("core.database.get_db_connection", return_value=mock_conn),
+        patch("core.database.return_db_connection"),
+    ):
         from core.database import execute_query
+
         result = await execute_query("SELECT 1", use_cache=False)
 
     assert result == [{"count": 42}]
@@ -37,15 +40,19 @@ async def test_execute_query_retries_on_dead_connection():
     fresh_conn.cursor.return_value = fresh_cursor
 
     call_count = 0
+
     def get_conn():
         nonlocal call_count
         call_count += 1
         return dead_conn if call_count == 1 else fresh_conn
 
-    with patch("core.database.get_db_connection", side_effect=get_conn), \
-         patch("core.database.create_db_connection", return_value=fresh_conn), \
-         patch("core.database.return_db_connection"):
+    with (
+        patch("core.database.get_db_connection", side_effect=get_conn),
+        patch("core.database.create_db_connection", return_value=fresh_conn),
+        patch("core.database.return_db_connection"),
+    ):
         from core.database import execute_query
+
         result = await execute_query("SELECT 1", use_cache=False)
 
     assert result == [{"val": 1}]
