@@ -81,11 +81,13 @@ starlette==0.47.3
     # via fastapi
 typing-extensions==4.15.0
     # via
+    #   anyio
     #   azure-core
     #   azure-identity
     #   fastapi
     #   pydantic
     #   pydantic-core
+    #   starlette
     #   typing-inspection
 typing-inspection==0.4.1
     # via pydantic
