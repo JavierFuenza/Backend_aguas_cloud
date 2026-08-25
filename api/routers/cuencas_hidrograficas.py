@@ -345,3 +345,124 @@ async def get_cuencas_stats(
     except Exception as e:
         logging.error(f"Error in get_cuencas_stats: {e}")
         raise HTTPException(status_code=500, detail={"error": str(e)})
+
+
+@router.get(
+    "/cuencas/stats_por_tipo",
+    tags=["Cuencas Hidrográficas"],
+    summary="Estadísticas de caudal separadas por tipo de extracción",
+    description=(
+        "Estadísticas de caudal de una cuenca, subcuenca o subsubcuenca, separadas "
+        "en extracción superficial y subterránea. Incluye el caudal total (suma de "
+        "los promedios de cada obra) y el número de obras con datos. La desviación "
+        "estándar no se entrega acá: se obtiene de /cuencas/stats, para la cuenca "
+        "completa."
+    ),
+)
+async def get_cuencas_stats_por_tipo(
+    cod_cuenca: Optional[int] = Query(
+        None, description="Código de cuenca", example=101
+    ),
+    cod_subcuenca: Optional[int] = Query(
+        None, description="Código de subcuenca", example=10101
+    ),
+    cod_subsubcuenca: Optional[int] = Query(None, description="Código de subsubcuenca"),
+):
+    """Estadísticas por tipo de extracción, calculadas desde dw.Puntos_Mapa.
+
+    dw.Cuenca_Stats no distingue superficial de subterránea, así que el desglose
+    se arma desde dw.Puntos_Mapa, que sí trae es_pozo_subterraneo.
+
+    Esa tabla está agregada por (punto, canal de transmisión), no por punto: en la
+    cuenca 101 son 142 filas para 128 obras. Sin colapsar primero por coordenada,
+    el número de obras se infla ~11% y el caudal total ~1%. La subconsulta interna
+    hace ese colapso, promediando los canales de un mismo punto ponderado por su
+    número de mediciones.
+    """
+    try:
+        filters = []
+        params = []
+
+        if cod_cuenca is not None:
+            filters.append("Cod_Cuenca = ?")
+            params.append(cod_cuenca)
+        if cod_subcuenca is not None:
+            filters.append("Cod_Subcuenca = ?")
+            params.append(cod_subcuenca)
+        if cod_subsubcuenca is not None:
+            filters.append("Cod_Subsubcuenca = ?")
+            params.append(cod_subsubcuenca)
+
+        if not filters:
+            raise HTTPException(
+                status_code=400,
+                detail="Indique cod_cuenca, cod_subcuenca o cod_subsubcuenca",
+            )
+
+        where_clause = "WHERE " + " AND ".join(filters)
+
+        query = f"""
+        SELECT
+            es_pozo_subterraneo,
+            COUNT(*) AS obras_con_datos,
+            SUM(n_mediciones) AS total_mediciones,
+            SUM(caudal_promedio) AS caudal_total,
+            SUM(caudal_promedio * n_mediciones) / NULLIF(SUM(n_mediciones), 0)
+                AS caudal_promedio,
+            MIN(caudal_minimo) AS caudal_minimo,
+            MAX(caudal_maximo) AS caudal_maximo
+        FROM (
+            SELECT
+                UTM_Norte,
+                UTM_Este,
+                MAX(CAST(es_pozo_subterraneo AS INT)) AS es_pozo_subterraneo,
+                SUM(n_mediciones) AS n_mediciones,
+                SUM(caudal_promedio * n_mediciones) / NULLIF(SUM(n_mediciones), 0)
+                    AS caudal_promedio,
+                MIN(caudal_minimo) AS caudal_minimo,
+                MAX(caudal_maximo) AS caudal_maximo
+            FROM dw.Puntos_Mapa
+            {where_clause}
+              AND caudal_promedio IS NOT NULL
+              AND n_mediciones > 0
+            GROUP BY UTM_Norte, UTM_Este
+        ) AS obras
+        GROUP BY es_pozo_subterraneo
+        """
+
+        results = await execute_query(query, params)
+
+        por_tipo = {}
+        for r in results:
+            clave = "subterranea" if r.get("es_pozo_subterraneo") else "superficial"
+            por_tipo[clave] = {
+                "obras_con_datos": r.get("obras_con_datos", 0),
+                "total_mediciones": r.get("total_mediciones", 0),
+                "caudal_total": safe_round(r.get("caudal_total")),
+                "caudal_promedio": safe_round(r.get("caudal_promedio")),
+                "caudal_minimo": safe_round(r.get("caudal_minimo")),
+                "caudal_maximo": safe_round(r.get("caudal_maximo")),
+            }
+
+        # Un grupo sin obras no viene en el resultado; se devuelve explícito en cero
+        # para que el frontend distinga "sin obras" de "no consultado".
+        for clave in ("superficial", "subterranea"):
+            por_tipo.setdefault(
+                clave,
+                {
+                    "obras_con_datos": 0,
+                    "total_mediciones": 0,
+                    "caudal_total": None,
+                    "caudal_promedio": None,
+                    "caudal_minimo": None,
+                    "caudal_maximo": None,
+                },
+            )
+
+        return por_tipo
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error in get_cuencas_stats_por_tipo: {e}")
+        raise HTTPException(status_code=500, detail={"error": str(e)})
