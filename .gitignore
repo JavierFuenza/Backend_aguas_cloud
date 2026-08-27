@@ -214,3 +214,6 @@ reports
 sql
 
 scripts/*
+# ...salvo los que sí hay que mantener: este genera un dato que la app sirve y
+# tiene que re-correrse con cada carga del DW.
+!scripts/generar_top_usuarios.py
