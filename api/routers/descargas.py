@@ -18,8 +18,10 @@ Dos decisiones que conviene entender antes de tocar este módulo:
    (REGION, FECHA_MEDICION) e `IX_Mediciones_full_Punto_Fecha` sobre
    (UTM_NORTE, UTM_ESTE, FECHA_MEDICION)— pero en ninguno `CODIGO` es la
    columna principal, así que cada descarga es un scan completo.
-   `sql/indicesv3.sql` agrega `IX_Mediciones_full_Codigo`, que lo vuelve un
-   seek; mientras no se ejecute, esperar decenas de segundos por descarga.
+   `sql/indicesv3.sql` agrega `IX_Mediciones_full_Codigo_Fecha` sobre
+   (CODIGO, FECHA_MEDICION), que lo vuelve un seek. La fecha va en la clave
+   porque el preview pide MIN y MAX de FECHA_MEDICION: sin ella el motor va al
+   heap fila por fila y el preview tarda ~22 s.
 
 El catálogo `COLUMNAS` es la única fuente de verdad de qué se puede descargar.
 La UI nunca ve los nombres reales del DW: manda `clave`, y acá se traduce a la

@@ -84,13 +84,14 @@ INCLUDE (SECTOR_SHA);
 -- duplicaría la tabla. Con ~11.800 filas por obra (0,016 % del total) los key
 -- lookups sobre el heap salen mucho más baratos que el scan.
 --
--- No se incluye FECHA_MEDICION como segunda clave a propósito: el filtro de
--- fechas de la descarga es opcional y siempre va acompañado de CODIGO, que ya
--- reduce el conjunto a ~11.800 filas en promedio.
+-- FECHA_MEDICION va como segunda clave porque /mediciones/preview pide
+-- MIN(FECHA_MEDICION) y MAX(FECHA_MEDICION) junto con el COUNT. Con sólo
+-- CODIGO el motor localiza las filas por índice pero va al heap a leer cada
+-- fecha, y eso costaba ~22 s por preview.
 IF NOT EXISTS (
     SELECT 1 FROM sys.indexes
-    WHERE name = 'IX_Mediciones_full_Codigo'
+    WHERE name = 'IX_Mediciones_full_Codigo_Fecha'
       AND object_id = OBJECT_ID('dw.Mediciones_full')
 )
-CREATE NONCLUSTERED INDEX IX_Mediciones_full_Codigo
-ON dw.Mediciones_full (CODIGO);
+CREATE NONCLUSTERED INDEX IX_Mediciones_full_Codigo_Fecha
+ON dw.Mediciones_full (CODIGO, FECHA_MEDICION);
