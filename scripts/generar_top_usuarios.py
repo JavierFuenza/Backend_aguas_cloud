@@ -67,7 +67,12 @@ CONSULTA = """
 SELECT
     COD_CUENCA,
     COD_SUBCUENCA,
+    COD_SECTOR_SHA,
     GROUPING(COD_SUBCUENCA) AS es_total_cuenca,
+    -- Distingue las filas del grouping set de SHAC: ahí COD_CUENCA viene nulo y
+    -- es_total_cuenca vale 1, así que sin este flag se confundirían con el total
+    -- de una cuenca sin código.
+    GROUPING(COD_SECTOR_SHA) AS sin_shac,
     LTRIM(RTRIM(NOMBRE_COMPLETO_USUARIO)) AS usuario,
     COUNT(*) AS reportes,
     COUNT(DISTINCT CONCAT(UTM_NORTE, '|', UTM_ESTE)) AS obras
@@ -77,7 +82,8 @@ WHERE NOMBRE_COMPLETO_USUARIO IS NOT NULL
   AND COD_CUENCA IS NOT NULL
 GROUP BY GROUPING SETS (
     (COD_CUENCA, LTRIM(RTRIM(NOMBRE_COMPLETO_USUARIO))),
-    (COD_CUENCA, COD_SUBCUENCA, LTRIM(RTRIM(NOMBRE_COMPLETO_USUARIO)))
+    (COD_CUENCA, COD_SUBCUENCA, LTRIM(RTRIM(NOMBRE_COMPLETO_USUARIO))),
+    (COD_SECTOR_SHA, LTRIM(RTRIM(NOMBRE_COMPLETO_USUARIO)))
 )
 """
 
@@ -90,6 +96,7 @@ def main() -> None:
 
     por_cuenca: dict[str, list] = {}
     por_subcuenca: dict[str, list] = {}
+    por_shac: dict[str, list] = {}
 
     for f in filas:
         entrada = {
@@ -100,7 +107,12 @@ def main() -> None:
         # es_total_cuenca = 1 sólo en las filas que GROUPING SETS generó
         # agregando por encima de la subcuenca. Un nulo en COD_SUBCUENCA con el
         # flag en 0 es una obra sin subcuenca asignada, que va al otro cesto.
-        if f["es_total_cuenca"] == 1:
+        # El grouping set de SHAC va primero: en esas filas COD_CUENCA es nulo y
+        # es_total_cuenca vale 1, así que caerían en el cesto equivocado.
+        if f["sin_shac"] == 0:
+            if f["COD_SECTOR_SHA"] is not None:
+                por_shac.setdefault(str(f["COD_SECTOR_SHA"]), []).append(entrada)
+        elif f["es_total_cuenca"] == 1:
             por_cuenca.setdefault(str(f["COD_CUENCA"]), []).append(entrada)
         elif f["COD_SUBCUENCA"] is not None:
             por_subcuenca.setdefault(str(f["COD_SUBCUENCA"]), []).append(entrada)
@@ -117,6 +129,7 @@ def main() -> None:
         "generado": time.strftime("%Y-%m-%d"),
         "cuenca": recortar(por_cuenca),
         "subcuenca": recortar(por_subcuenca),
+        "shac": recortar(por_shac),
     }
 
     SALIDA.parent.mkdir(parents=True, exist_ok=True)
@@ -125,7 +138,11 @@ def main() -> None:
         encoding="utf-8",
     )
     kb = SALIDA.stat().st_size / 1024
-    print(f"  cuencas: {len(salida['cuenca'])}, subcuencas: {len(salida['subcuenca'])}")
+    print(
+        f"  cuencas: {len(salida['cuenca'])}, "
+        f"subcuencas: {len(salida['subcuenca'])}, "
+        f"shacs: {len(salida['shac'])}"
+    )
     print(f"  escrito {SALIDA} ({kb:.0f} KB)")
 
 

@@ -230,6 +230,81 @@ async def get_filtros_reactivos():
 
 
 @router.get(
+    "/shacs/stats",
+    tags=["Cuencas Hidrográficas"],
+    summary="Estadísticas de caudal de un sector SHAC",
+    description=(
+        "Estadísticas agregadas de caudal para un Sector Hidrogeológico de "
+        "Aprovechamiento Común. Equivale a /cuencas/stats pero para SHAC."
+    ),
+)
+async def get_shac_stats(
+    shac: int = Query(..., description="Código de sector SHAC (COD_SECTOR_SHA)"),
+):
+    """Estadísticas de un SHAC, calculadas desde dw.Puntos_Mapa.
+
+    dw.Cuenca_Stats está agregada por la jerarquía de cuencas y no conoce el
+    SHAC, así que no sirve de fuente. Puntos_Mapa sí trae COD_SECTOR_SHA.
+
+    Igual que en /cuencas/stats_por_tipo, la subconsulta interna colapsa por
+    coordenada antes de agregar: Puntos_Mapa tiene una fila por (punto, canal de
+    transmisión), y sin ese paso el número de obras y el caudal total se inflan.
+
+    Una diferencia con /cuencas/stats: la desviación estándar que devuelve es la
+    dispersión del caudal promedio ENTRE obras del sector, no la dispersión de
+    las mediciones individuales. Esa segunda no se puede reconstruir desde una
+    tabla ya agregada; habría que ir a las mediciones crudas.
+    """
+    try:
+        query = """
+        SELECT
+            COUNT(*) AS obras_con_datos,
+            SUM(n_mediciones) AS total_mediciones,
+            SUM(caudal_promedio) AS caudal_total,
+            SUM(caudal_promedio * n_mediciones) / NULLIF(SUM(n_mediciones), 0)
+                AS caudal_promedio,
+            MIN(caudal_minimo) AS caudal_minimo,
+            MAX(caudal_maximo) AS caudal_maximo,
+            STDEV(caudal_promedio) AS caudal_desviacion_estandar
+        FROM (
+            SELECT
+                UTM_Norte,
+                UTM_Este,
+                SUM(n_mediciones) AS n_mediciones,
+                SUM(caudal_promedio * n_mediciones) / NULLIF(SUM(n_mediciones), 0)
+                    AS caudal_promedio,
+                MIN(caudal_minimo) AS caudal_minimo,
+                MAX(caudal_maximo) AS caudal_maximo
+            FROM dw.Puntos_Mapa
+            WHERE COD_SECTOR_SHA = ?
+              AND caudal_promedio IS NOT NULL
+              AND n_mediciones > 0
+            GROUP BY UTM_Norte, UTM_Este
+        ) AS obras
+        """
+        results = await execute_query(query, [shac])
+        fila = results[0] if results else {}
+
+        return {
+            "shac": shac,
+            "estadisticas": {
+                "obras_con_datos": fila.get("obras_con_datos", 0) or 0,
+                "total_mediciones": fila.get("total_mediciones", 0) or 0,
+                "caudal_total": safe_round(fila.get("caudal_total")),
+                "caudal_promedio": safe_round(fila.get("caudal_promedio")),
+                "caudal_minimo": safe_round(fila.get("caudal_minimo")),
+                "caudal_maximo": safe_round(fila.get("caudal_maximo")),
+                "caudal_desviacion_estandar": safe_round(
+                    fila.get("caudal_desviacion_estandar")
+                ),
+            },
+        }
+    except Exception as e:
+        logging.error(f"Error in get_shac_stats: {e}")
+        raise HTTPException(status_code=500, detail={"error": str(e)})
+
+
+@router.get(
     "/cuencas/stats",
     tags=["Cuencas Hidrográficas"],
     summary="Estadísticas de caudal por cuenca",
@@ -367,6 +442,9 @@ async def get_cuencas_stats_por_tipo(
         None, description="Código de subcuenca", example=10101
     ),
     cod_subsubcuenca: Optional[int] = Query(None, description="Código de subsubcuenca"),
+    shac: Optional[int] = Query(
+        None, description="Código de sector SHAC (COD_SECTOR_SHA)"
+    ),
 ):
     """Estadísticas por tipo de extracción, calculadas desde dw.Puntos_Mapa.
 
@@ -392,11 +470,14 @@ async def get_cuencas_stats_por_tipo(
         if cod_subsubcuenca is not None:
             filters.append("Cod_Subsubcuenca = ?")
             params.append(cod_subsubcuenca)
+        if shac is not None:
+            filters.append("COD_SECTOR_SHA = ?")
+            params.append(shac)
 
         if not filters:
             raise HTTPException(
                 status_code=400,
-                detail="Indique cod_cuenca, cod_subcuenca o cod_subsubcuenca",
+                detail="Indique cod_cuenca, cod_subcuenca, cod_subsubcuenca o shac",
             )
 
         where_clause = "WHERE " + " AND ".join(filters)
