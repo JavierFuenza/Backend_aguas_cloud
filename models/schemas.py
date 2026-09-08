@@ -62,6 +62,13 @@ class PuntoInfoResponse(BaseModel):
     sector_sha: Optional[str] = Field(
         None, description="Sector Hidráulico de Aprovechamiento Común"
     )
+    cod_sector_sha: Optional[int] = Field(
+        None,
+        description=(
+            "Código del sector SHAC. El nombre no basta para abrir el análisis "
+            "del sector: /shacs/stats filtra por este código."
+        ),
+    )
     apr: Optional[bool] = Field(None, description="Agua Potable Rural")
     id_junta: Optional[float] = Field(None, description="ID Junta de Vigilancia")
     parte_junta: Optional[bool] = None
