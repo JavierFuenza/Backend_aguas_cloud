@@ -69,3 +69,28 @@ INCLUDE (Nom_Cuenca, Nom_Subcuenca, Nom_Subsubcuenca, Cod_Region,
 CREATE NONCLUSTERED INDEX IX_Puntos_Mapa_SHAC_PorCuenca
 ON dw.Puntos_Mapa (Cod_Cuenca, Cod_Subcuenca, COD_SECTOR_SHA)
 INCLUDE (SECTOR_SHA);
+
+-- ---------------------------------------------------------------------------
+-- dw.Mediciones_full
+-- ---------------------------------------------------------------------------
+-- La tabla base es un heap con dos índices que NO están declarados en este
+-- archivo (creados a mano en la base): IX_temp_export sobre
+-- (REGION, FECHA_MEDICION) e IX_Mediciones_full_Punto_Fecha sobre
+-- (UTM_NORTE, UTM_ESTE, FECHA_MEDICION). En ninguno CODIGO es columna
+-- principal, así que la descarga de mediciones por obra
+-- (/api/mediciones/descarga) hace un scan de los ~71,8 M de registros.
+--
+-- No lleva INCLUDE: la descarga proyecta hasta 24 columnas y cubrirlas todas
+-- duplicaría la tabla. Con ~11.800 filas por obra (0,016 % del total) los key
+-- lookups sobre el heap salen mucho más baratos que el scan.
+--
+-- No se incluye FECHA_MEDICION como segunda clave a propósito: el filtro de
+-- fechas de la descarga es opcional y siempre va acompañado de CODIGO, que ya
+-- reduce el conjunto a ~11.800 filas en promedio.
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE name = 'IX_Mediciones_full_Codigo'
+      AND object_id = OBJECT_ID('dw.Mediciones_full')
+)
+CREATE NONCLUSTERED INDEX IX_Mediciones_full_Codigo
+ON dw.Mediciones_full (CODIGO);

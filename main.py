@@ -72,6 +72,10 @@ tags_metadata = [
         "description": "Consulta de informantes que han reportado mediciones y sus respectivas estaciones.",
     },
     {
+        "name": "Descarga de Datos",
+        "description": "Descarga de mediciones crudas por obra en CSV, Excel o Parquet, con selección de columnas. Cubre la exigencia del Convenio de que toda la data obtenida pueda ser descargada por el usuario.",
+    },
+    {
         "name": "Derechos de Agua",
         "description": "Derechos de agua por punto y cuenca: tipo, volumen anual, caudal mensual autorizado.",
     },
@@ -115,6 +119,7 @@ from api.routers import (  # noqa: E402
     atlas,
     informantes,
     derechos,
+    descargas,
 )
 
 app.include_router(system.router)
@@ -125,3 +130,4 @@ app.include_router(series_temporales.router)
 app.include_router(atlas.router)
 app.include_router(informantes.router)
 app.include_router(derechos.router)
+app.include_router(descargas.router)
