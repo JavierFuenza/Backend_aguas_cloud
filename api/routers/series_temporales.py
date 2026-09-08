@@ -43,7 +43,9 @@ async def get_caudal_por_tiempo_por_cuenca(
         query = f"""
         SELECT 
             s.FECHA_MEDICION AS fecha_medicion, 
-            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio
+            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio,
+            MIN(CAST(s.CAUDAL AS FLOAT)) AS caudal_minimo,
+            MAX(CAST(s.CAUDAL AS FLOAT)) AS caudal_maximo
         FROM dw.Series_tiempo s
         {join_puntos}
         WHERE {subquery_filter}
@@ -70,6 +72,13 @@ async def get_caudal_por_tiempo_por_cuenca(
                     ),
                     "caudal": r.get("caudal_promedio"),
                     "caudal_promedio": r.get("caudal_promedio"),
+                    # El gráfico diario pide mínimo, promedio y máximo del día
+                    # (observación 4.4 del seguimiento con la DGA). Se agregan acá
+                    # porque la fila ya viene agrupada por fecha: si el frontend
+                    # recibiera sólo el promedio, los tres valores del día serían
+                    # el mismo número.
+                    "caudal_minimo": r.get("caudal_minimo"),
+                    "caudal_maximo": r.get("caudal_maximo"),
                 }
                 for r in results
             ]
@@ -266,7 +275,9 @@ async def get_caudal_por_tiempo_por_subcuenca(
         query = f"""
         SELECT 
             s.FECHA_MEDICION AS fecha_medicion, 
-            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio
+            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio,
+            MIN(CAST(s.CAUDAL AS FLOAT)) AS caudal_minimo,
+            MAX(CAST(s.CAUDAL AS FLOAT)) AS caudal_maximo
         FROM dw.Series_tiempo s
         {join_puntos}
         WHERE {subquery_filter}
@@ -293,6 +304,13 @@ async def get_caudal_por_tiempo_por_subcuenca(
                     ),
                     "caudal": r.get("caudal_promedio"),
                     "caudal_promedio": r.get("caudal_promedio"),
+                    # El gráfico diario pide mínimo, promedio y máximo del día
+                    # (observación 4.4 del seguimiento con la DGA). Se agregan acá
+                    # porque la fila ya viene agrupada por fecha: si el frontend
+                    # recibiera sólo el promedio, los tres valores del día serían
+                    # el mismo número.
+                    "caudal_minimo": r.get("caudal_minimo"),
+                    "caudal_maximo": r.get("caudal_maximo"),
                 }
                 for r in results
             ]
@@ -489,7 +507,9 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
         query = f"""
         SELECT 
             s.FECHA_MEDICION AS fecha_medicion, 
-            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio
+            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio,
+            MIN(CAST(s.CAUDAL AS FLOAT)) AS caudal_minimo,
+            MAX(CAST(s.CAUDAL AS FLOAT)) AS caudal_maximo
         FROM dw.Series_tiempo s
         {join_puntos}
         WHERE {subquery_filter}
@@ -516,6 +536,13 @@ async def get_caudal_por_tiempo_por_subsubcuenca(
                     ),
                     "caudal": r.get("caudal_promedio"),
                     "caudal_promedio": r.get("caudal_promedio"),
+                    # El gráfico diario pide mínimo, promedio y máximo del día
+                    # (observación 4.4 del seguimiento con la DGA). Se agregan acá
+                    # porque la fila ya viene agrupada por fecha: si el frontend
+                    # recibiera sólo el promedio, los tres valores del día serían
+                    # el mismo número.
+                    "caudal_minimo": r.get("caudal_minimo"),
+                    "caudal_maximo": r.get("caudal_maximo"),
                 }
                 for r in results
             ]
@@ -704,7 +731,9 @@ async def get_caudal_por_tiempo_por_shac(
         query = f"""
         SELECT 
             s.FECHA_MEDICION AS fecha_medicion, 
-            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio
+            AVG(CAST(s.CAUDAL AS FLOAT)) AS caudal_promedio,
+            MIN(CAST(s.CAUDAL AS FLOAT)) AS caudal_minimo,
+            MAX(CAST(s.CAUDAL AS FLOAT)) AS caudal_maximo
         FROM dw.Series_tiempo s
         INNER JOIN dw.Puntos_Mapa p 
             ON s.UTM_NORTE = p.UTM_Norte 
@@ -742,6 +771,13 @@ async def get_caudal_por_tiempo_por_shac(
                 ),
                 "caudal": r.get("caudal_promedio"),
                 "caudal_promedio": r.get("caudal_promedio"),
+                # El gráfico diario pide mínimo, promedio y máximo del día
+                # (observación 4.4 del seguimiento con la DGA). Se agregan acá
+                # porque la fila ya viene agrupada por fecha: si el frontend
+                # recibiera sólo el promedio, los tres valores del día serían
+                # el mismo número.
+                "caudal_minimo": r.get("caudal_minimo"),
+                "caudal_maximo": r.get("caudal_maximo"),
             }
             for r in results
         ]

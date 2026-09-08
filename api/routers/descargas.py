@@ -138,7 +138,7 @@ COLUMNAS: List[Dict] = [
     {
         "clave": "usuario_obra",
         "etiqueta": "Usuario de la obra",
-        "sql": "NOMBRE_COMPLETO_USUARIO",
+        "sql": "LTRIM(RTRIM(NOMBRE_COMPLETO_USUARIO))",
         "grupo": "Identificación",
         "tipo": "texto",
         "por_defecto": True,

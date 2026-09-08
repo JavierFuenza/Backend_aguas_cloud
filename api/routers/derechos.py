@@ -73,6 +73,22 @@ async def get_punto_derechos(
       AND (TIPO_DERECHO IS NOT NULL OR VOLUMEN_ANUAL IS NOT NULL OR {algun_caudal})
     """
 
+    # El titular de la obra sólo existe en Mediciones_full: el pipeline no lo
+    # arrastra a Puntos_Mapa. Lo pide la observación 6.1 del seguimiento con la
+    # DGA. El ORDER BY es gratis porque IX_Mediciones_full_Punto_Fecha ya tiene
+    # (UTM_NORTE, UTM_ESTE, FECHA_MEDICION), así que TOP 1 corta enseguida.
+    #
+    # Se toma el más reciente y no un DISTINCT: una obra puede haber cambiado de
+    # titular, y lo que interesa mostrar es quién la explota hoy.
+    query_usuario = """
+    SELECT TOP 1 LTRIM(RTRIM(NOMBRE_COMPLETO_USUARIO)) AS usuario
+    FROM dw.Mediciones_full
+    WHERE UTM_NORTE = ? AND UTM_ESTE = ?
+      AND NOMBRE_COMPLETO_USUARIO IS NOT NULL
+      AND LTRIM(RTRIM(NOMBRE_COMPLETO_USUARIO)) <> ''
+    ORDER BY FECHA_MEDICION DESC
+    """
+
     try:
         rows = await execute_query(query, params=[utm_norte, utm_este], use_cache=False)
         origen = "puntos_mapa"
@@ -80,6 +96,9 @@ async def get_punto_derechos(
         if not rows:
             rows = await execute_query(query_respaldo, params=[utm_norte, utm_este])
             origen = "mediciones_full"
+
+        usuario_rows = await execute_query(query_usuario, params=[utm_norte, utm_este])
+        usuario = usuario_rows[0]["usuario"] if usuario_rows else None
     except Exception as e:
         logging.error(f"Error get_punto_derechos: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail={"error": str(e)})
@@ -98,6 +117,7 @@ async def get_punto_derechos(
     row = rows[0]
     tipo = row.get("TIPO_DERECHO")
     return {
+        "usuario_obra": usuario,
         "tipo_derecho": tipo,
         # Sin dato ≠ código no reconocido: una obra puede tener volumen y caudal
         # registrados con TIPO_DERECHO nulo (ver respaldo de abajo).
