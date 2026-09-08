@@ -169,6 +169,7 @@ async def get_puntos(
             Huso,
             es_pozo_subterraneo,
             Cod_Subsubcuenca,
+            COD_SECTOR_SHA,
             SECTOR_SHA,
             APR,
             ID_JUNTA,
@@ -325,6 +326,7 @@ async def get_punto_info(
             Nom_Subcuenca,
             Cod_Subsubcuenca,
             Nom_Subsubcuenca,
+            COD_SECTOR_SHA,
             SECTOR_SHA,
             APR,
             ID_JUNTA,
@@ -387,6 +389,9 @@ async def get_punto_info(
             "caudal_promedio": safe_round(caudal_promedio),
             "n_mediciones": total_mediciones,
             "sector_sha": p.get("SECTOR_SHA"),
+            # El nombre no alcanza para abrir el analisis del sector: el panel
+            # y /shacs/stats filtran por COD_SECTOR_SHA.
+            "cod_sector_sha": p.get("COD_SECTOR_SHA"),
             "apr": bool(p.get("APR", 0)) if p.get("APR") is not None else None,
             "id_junta": p.get("ID_JUNTA"),
             "parte_junta": (
